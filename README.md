@@ -199,9 +199,9 @@ Configuration Claude Code (`.mcp.json` à la racine du projet) :
 ```json
 {
   "mcpServers": {
-    "gitlab": { "url": "http://localhost:3001/mcp" },
-    "sonarqube": { "url": "http://localhost:3002/mcp" },
-    "temporal": { "url": "http://localhost:3003/mcp" }
+    "gitlab":    { "type": "http", "url": "http://localhost:3001/mcp" },
+    "sonarqube": { "type": "http", "url": "http://localhost:3002/mcp" },
+    "temporal":  { "type": "http", "url": "http://localhost:3003/mcp" }
   }
 }
 ```
