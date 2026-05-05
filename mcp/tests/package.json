@@ -1,0 +1,19 @@
+{
+  "name": "@factory/mcp-tests",
+  "version": "0.1.0",
+  "description": "MCP round-trip integration tests for GitLab, SonarQube, and Temporal servers",
+  "type": "module",
+  "scripts": {
+    "test": "tsx src/index.ts",
+    "lint": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "@temporalio/client": "^1.11.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3"
+  }
+}

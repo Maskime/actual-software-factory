@@ -1,0 +1,270 @@
+import { z } from "zod";
+import { type GitLabClient, GitLabApiError } from "../gitlab-client.js";
+
+interface GitLabIssue {
+  id: number;
+  iid: number;
+  title: string;
+  description: string | null;
+  state: "opened" | "closed";
+  labels: string[];
+  assignees: Array<{ id: number; username: string; name: string }>;
+  web_url: string;
+}
+
+function projectPath(projectId: string): string {
+  return `/projects/${encodeURIComponent(projectId)}`;
+}
+
+function errorResponse(err: unknown) {
+  if (err instanceof GitLabApiError) {
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            error: {
+              code: err.code,
+              statusCode: err.statusCode,
+              message: err.message,
+            },
+          }),
+        },
+      ],
+      isError: true as const,
+    };
+  }
+  const message = err instanceof Error ? err.message : String(err);
+  return {
+    content: [{ type: "text" as const, text: message }],
+    isError: true as const,
+  };
+}
+
+// gitlab_get_issue
+
+export const getIssueSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  issue_iid: z.number().int().positive().describe("Issue IID (project-scoped integer ID)"),
+});
+
+export async function handleGetIssue(
+  client: GitLabClient,
+  params: z.infer<typeof getIssueSchema>
+) {
+  try {
+    const issue = await client.get<GitLabIssue>(
+      `${projectPath(params.project_id)}/issues/${params.issue_iid}`
+    );
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            iid: issue.iid,
+            title: issue.title,
+            description: issue.description,
+            labels: issue.labels,
+            assignees: issue.assignees,
+            state: issue.state,
+            web_url: issue.web_url,
+          }),
+        },
+      ],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+// gitlab_list_issues
+
+export const listIssuesSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  state: z
+    .enum(["opened", "closed", "all"])
+    .optional()
+    .describe("Filter by issue state (default: opened)"),
+  labels: z
+    .string()
+    .optional()
+    .describe("Comma-separated list of label names to filter by"),
+  assignee_username: z
+    .string()
+    .optional()
+    .describe("Filter issues assigned to this username"),
+  page: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Page number for pagination (default: 1)"),
+});
+
+export async function handleListIssues(
+  client: GitLabClient,
+  params: z.infer<typeof listIssuesSchema>
+) {
+  try {
+    const queryParams: Record<string, unknown> = { per_page: 100 };
+    if (params.state !== undefined) queryParams.state = params.state;
+    if (params.labels !== undefined) queryParams.labels = params.labels;
+    if (params.assignee_username !== undefined)
+      queryParams.assignee_username = params.assignee_username;
+    if (params.page !== undefined) queryParams.page = params.page;
+
+    const issues = await client.get<GitLabIssue[]>(
+      `${projectPath(params.project_id)}/issues`,
+      queryParams
+    );
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            issues.map((i) => ({
+              iid: i.iid,
+              title: i.title,
+              description: i.description,
+              labels: i.labels,
+              assignees: i.assignees,
+              state: i.state,
+              web_url: i.web_url,
+            }))
+          ),
+        },
+      ],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+// gitlab_create_issue
+
+export const createIssueSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  title: z.string().min(1).describe("Issue title"),
+  description: z.string().optional().describe("Issue description (Markdown)"),
+  labels: z
+    .string()
+    .optional()
+    .describe("Comma-separated list of label names to apply"),
+});
+
+export async function handleCreateIssue(
+  client: GitLabClient,
+  params: z.infer<typeof createIssueSchema>
+) {
+  try {
+    const body: Record<string, unknown> = { title: params.title };
+    if (params.description !== undefined) body.description = params.description;
+    if (params.labels !== undefined) body.labels = params.labels;
+
+    const issue = await client.post<GitLabIssue>(
+      `${projectPath(params.project_id)}/issues`,
+      body
+    );
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            iid: issue.iid,
+            id: issue.id,
+            web_url: issue.web_url,
+          }),
+        },
+      ],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+// gitlab_update_issue
+
+export const updateIssueSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  issue_iid: z.number().int().positive().describe("Issue IID to update"),
+  title: z.string().optional().describe("New title"),
+  description: z.string().optional().describe("New description (Markdown)"),
+  labels: z
+    .string()
+    .optional()
+    .describe("Comma-separated list of labels (replaces existing labels)"),
+  state_event: z
+    .enum(["close", "reopen"])
+    .optional()
+    .describe("Transition the issue state: close or reopen"),
+});
+
+export async function handleUpdateIssue(
+  client: GitLabClient,
+  params: z.infer<typeof updateIssueSchema>
+) {
+  try {
+    const body: Record<string, unknown> = {};
+    if (params.title !== undefined) body.title = params.title;
+    if (params.description !== undefined) body.description = params.description;
+    if (params.labels !== undefined) body.labels = params.labels;
+    if (params.state_event !== undefined) body.state_event = params.state_event;
+
+    const issue = await client.put<GitLabIssue>(
+      `${projectPath(params.project_id)}/issues/${params.issue_iid}`,
+      body
+    );
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            iid: issue.iid,
+            title: issue.title,
+            description: issue.description,
+            labels: issue.labels,
+            assignees: issue.assignees,
+            state: issue.state,
+            web_url: issue.web_url,
+          }),
+        },
+      ],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+// gitlab_close_issue
+
+export const closeIssueSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  issue_iid: z.number().int().positive().describe("Issue IID to close"),
+});
+
+export async function handleCloseIssue(
+  client: GitLabClient,
+  params: z.infer<typeof closeIssueSchema>
+) {
+  try {
+    const issue = await client.put<GitLabIssue>(
+      `${projectPath(params.project_id)}/issues/${params.issue_iid}`,
+      { state_event: "close" }
+    );
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            closed: issue.state === "closed",
+            state: issue.state,
+            iid: issue.iid,
+            web_url: issue.web_url,
+          }),
+        },
+      ],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}

@@ -1,0 +1,178 @@
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { type GitLabClient } from "./gitlab-client.js";
+import { checkAuthSchema, handleCheckAuth } from "./tools/health.js";
+import {
+  getIssueSchema,
+  handleGetIssue,
+  listIssuesSchema,
+  handleListIssues,
+  createIssueSchema,
+  handleCreateIssue,
+  updateIssueSchema,
+  handleUpdateIssue,
+  closeIssueSchema,
+  handleCloseIssue,
+} from "./tools/issues.js";
+import {
+  createMrSchema,
+  handleCreateMr,
+  getMrSchema,
+  handleGetMr,
+  getMrDiffSchema,
+  handleGetMrDiff,
+  addMrCommentSchema,
+  handleAddMrComment,
+  addMrInlineCommentSchema,
+  handleAddMrInlineComment,
+  mergeMrSchema,
+  handleMergeMr,
+} from "./tools/merge_requests.js";
+import {
+  createBranchSchema,
+  handleCreateBranch,
+  listBranchesSchema,
+  handleListBranches,
+  deleteBranchSchema,
+  handleDeleteBranch,
+  commitFilesSchema,
+  handleCommitFiles,
+  getFileSchema,
+  handleGetFile,
+  getRepositoryTreeSchema,
+  handleGetRepositoryTree,
+} from "./tools/branches.js";
+
+export function buildMcpServer(client: GitLabClient): McpServer {
+  const server = new McpServer({
+    name: "mcp-gitlab",
+    version: "0.1.0",
+  });
+
+  server.tool(
+    "gitlab_check_auth",
+    "Verify GitLab authentication and return the authenticated user info",
+    checkAuthSchema.shape,
+    () => handleCheckAuth(client)
+  );
+
+  server.tool(
+    "gitlab_get_issue",
+    "Retrieve a GitLab issue by its project-scoped IID. Returns title, description, labels, assignees, state, and URL.",
+    getIssueSchema.shape,
+    (params) => handleGetIssue(client, params)
+  );
+
+  server.tool(
+    "gitlab_list_issues",
+    "List issues in a GitLab project. Supports filtering by state (opened/closed/all), labels (comma-separated), and assignee username. Returns up to 100 issues per page.",
+    listIssuesSchema.shape,
+    (params) => handleListIssues(client, params)
+  );
+
+  server.tool(
+    "gitlab_create_issue",
+    "Create a new issue in a GitLab project. Returns the created issue IID, global ID, and URL.",
+    createIssueSchema.shape,
+    (params) => handleCreateIssue(client, params)
+  );
+
+  server.tool(
+    "gitlab_update_issue",
+    "Update an existing GitLab issue. Modifiable fields: title, description, labels (comma-separated, replaces all), state_event (close/reopen). Only provided fields are updated.",
+    updateIssueSchema.shape,
+    (params) => handleUpdateIssue(client, params)
+  );
+
+  server.tool(
+    "gitlab_close_issue",
+    "Close an open GitLab issue. Returns a confirmation with the final state and URL.",
+    closeIssueSchema.shape,
+    (params) => handleCloseIssue(client, params)
+  );
+
+  server.tool(
+    "gitlab_create_mr",
+    "Create a GitLab Merge Request from a source branch to a target branch. Returns the MR IID and URL.",
+    createMrSchema.shape,
+    (params) => handleCreateMr(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_mr",
+    "Get the status, diff summary, labels, and comments of a GitLab Merge Request by its project-scoped IID.",
+    getMrSchema.shape,
+    (params) => handleGetMr(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_mr_diff",
+    "Get the full file diff (modified files and line-level changes) of a GitLab Merge Request.",
+    getMrDiffSchema.shape,
+    (params) => handleGetMrDiff(client, params)
+  );
+
+  server.tool(
+    "gitlab_add_mr_comment",
+    "Post a general comment on a GitLab Merge Request. Returns the created note ID and metadata.",
+    addMrCommentSchema.shape,
+    (params) => handleAddMrComment(client, params)
+  );
+
+  server.tool(
+    "gitlab_add_mr_inline_comment",
+    "Post an inline comment on a specific line of a GitLab Merge Request diff. Requires at least new_line or old_line.",
+    addMrInlineCommentSchema.shape,
+    (params) => handleAddMrInlineComment(client, params)
+  );
+
+  server.tool(
+    "gitlab_merge_mr",
+    "Merge a GitLab Merge Request. Fails with a structured error if unresolved discussions or failed pipelines block the merge. Supports merge_when_pipeline_succeeds for async merging.",
+    mergeMrSchema.shape,
+    (params) => handleMergeMr(client, params)
+  );
+
+  server.tool(
+    "gitlab_create_branch",
+    "Create a new branch in a GitLab project from a given ref (branch name, tag, or commit SHA). Returns the new branch name and its head commit SHA.",
+    createBranchSchema.shape,
+    (params) => handleCreateBranch(client, params)
+  );
+
+  server.tool(
+    "gitlab_delete_branch",
+    "Delete a branch from a GitLab project. Deleting a branch also closes any open Merge Requests targeting that branch. Returns a confirmation.",
+    deleteBranchSchema.shape,
+    (params) => handleDeleteBranch(client, params)
+  );
+
+  server.tool(
+    "gitlab_list_branches",
+    "List branches of a GitLab project with their head commit SHA. Supports name filtering and pagination (up to 100 per page).",
+    listBranchesSchema.shape,
+    (params) => handleListBranches(client, params)
+  );
+
+  server.tool(
+    "gitlab_commit_files",
+    "Create a commit on an existing branch with one or more file actions (create, update, delete, move). Content is provided as plain text and encoded automatically. Requires write_repository scope on the GitLab token. Fails with a structured error if the branch does not exist or a conflict is detected.",
+    commitFilesSchema.shape,
+    (params) => handleCommitFiles(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_file",
+    "Retrieve the content of a file from a GitLab repository for a given ref (branch name, tag, or commit SHA). Content is returned as plain UTF-8 text.",
+    getFileSchema.shape,
+    (params) => handleGetFile(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_repository_tree",
+    "List the contents of a directory in a GitLab repository for a given ref. Returns file and subdirectory entries with their paths and types. Supports recursive listing.",
+    getRepositoryTreeSchema.shape,
+    (params) => handleGetRepositoryTree(client, params)
+  );
+
+  return server;
+}
