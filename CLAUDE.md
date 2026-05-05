@@ -30,6 +30,8 @@ Every MCP server must be deployed as its own Docker container in `infrastructure
 
 ## General tooling rules
 
+**GitLab project:** When using the GitLab MCP server from this repository, the target project is **"Software Factory"**, ID `3`.
+
 **Do not use the `gh` CLI.** To fetch information about GitHub repositories (README, releases, file content, API data), use HTTP directly — e.g. `curl https://api.github.com/...` or `fetch()` in TypeScript. The `gh` command is not guaranteed to be installed or authenticated in this environment.
 
 ## Infrastructure
