@@ -1,0 +1,27 @@
+# =============================================================================
+# Secrets — ne jamais commiter
+# =============================================================================
+
+# Fichiers .env locaux (tous les sous-dossiers)
+**/.env
+.env.*
+# Autoriser explicitement les fichiers de documentation des clés
+!.env.example
+!**/.env.example
+
+# Clés privées et certificats
+*.key
+*.pem
+*.p12
+*.pfx
+*.crt
+*.cer
+
+# Répertoires de type vault local
+secrets/
+.secrets/
+
+# Fichiers de token temporaires
+*.token
+**/node_modules
+**/dist

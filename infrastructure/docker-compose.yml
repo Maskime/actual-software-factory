@@ -1,0 +1,306 @@
+services:
+
+  # ---------------------------------------------------------------------------
+  # GitLab CE — Ticketing, versionning, CI/CD (EPIC-01 / US-01)
+  # ---------------------------------------------------------------------------
+  gitlab:
+    image: gitlab/gitlab-ce:latest
+    container_name: gitlab
+    restart: always
+    hostname: gitlab
+    environment:
+      GITLAB_OMNIBUS_CONFIG: |
+        external_url '${GITLAB_EXTERNAL_URL}'
+        gitlab_rails['initial_root_password'] = '${GITLAB_ROOT_PASSWORD}'
+
+        # Memory tuning — cible ~3-4 GB au lieu de 10 GB par défaut
+        puma['worker_processes'] = 2
+        puma['min_threads'] = 1
+        puma['max_threads'] = 4
+        sidekiq['max_concurrency'] = 10
+
+        # Désactive les services de monitoring intégrés (inutiles en local)
+        prometheus_monitoring['enable'] = false
+        alertmanager['enable'] = false
+
+        # Réduit les buffers PostgreSQL embarqué
+        postgresql['shared_buffers'] = '256MB'
+        postgresql['max_connections'] = 100
+    ports:
+      - "80:80"
+      - "2222:22"
+    healthcheck:
+      test: ["CMD", "curl", "-sf", "http://localhost/-/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+    volumes:
+      - gitlab_config:/etc/gitlab
+      - gitlab_logs:/var/log/gitlab
+      - gitlab_data:/var/opt/gitlab
+    networks:
+      - factory-network
+
+  # ---------------------------------------------------------------------------
+  # GitLab Runner — Exécuteur CI/CD (EPIC-01 / US-02)
+  # ---------------------------------------------------------------------------
+  gitlab-runner:
+    image: gitlab/gitlab-runner:latest
+    container_name: gitlab-runner
+    restart: always
+    volumes:
+      - gitlab_runner_config:/etc/gitlab-runner
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - factory-network
+    depends_on:
+      gitlab:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # SonarQube DB — PostgreSQL 15 (EPIC-01 / US-03)
+  # ---------------------------------------------------------------------------
+  sonarqube-db:
+    image: postgres:15
+    container_name: sonarqube-db
+    restart: always
+    environment:
+      POSTGRES_USER: sonar
+      POSTGRES_PASSWORD: ${SONARQUBE_DB_PASSWORD}
+      POSTGRES_DB: sonar
+    volumes:
+      - sonarqube_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sonar"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - factory-network
+
+  # ---------------------------------------------------------------------------
+  # SonarQube Community Edition — Static analysis (EPIC-01 / US-03)
+  # Prérequis hôte : sysctl -w vm.max_map_count=524288 (Elasticsearch intégré)
+  # ---------------------------------------------------------------------------
+  sonarqube:
+    image: mc1arke/sonarqube-with-community-branch-plugin:latest
+    container_name: sonarqube
+    restart: always
+    depends_on:
+      sonarqube-db:
+        condition: service_healthy
+    environment:
+      SONAR_JDBC_URL: jdbc:postgresql://sonarqube-db:5432/sonar
+      SONAR_JDBC_USERNAME: sonar
+      SONAR_JDBC_PASSWORD: ${SONARQUBE_DB_PASSWORD}
+    ports:
+      - "9000:9000"
+    ulimits:
+      nofile:
+        soft: 65536
+        hard: 65536
+    volumes:
+      - sonarqube_data:/opt/sonarqube/data
+      - sonarqube_extensions:/opt/sonarqube/extensions
+      - sonarqube_logs:/opt/sonarqube/logs
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:9000/api/system/status | grep -q '\"status\":\"UP\"'"]
+      interval: 30s
+      timeout: 10s
+      retries: 20
+      start_period: 120s
+    networks:
+      - factory-network
+
+  # ---------------------------------------------------------------------------
+  # Temporal DB — PostgreSQL 15 dédié à Temporal (EPIC-01 / US-05)
+  # ---------------------------------------------------------------------------
+  temporal-db:
+    image: postgres:15
+    container_name: temporal-db
+    restart: always
+    environment:
+      POSTGRES_USER: temporal
+      POSTGRES_PASSWORD: ${TEMPORAL_DB_PASSWORD}
+      POSTGRES_DB: temporal
+    volumes:
+      - temporal_db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U temporal"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - factory-network
+
+  # ---------------------------------------------------------------------------
+  # Temporal Server — Orchestrateur de workflows (EPIC-01 / US-05)
+  # auto-setup : initialise le schéma DB et le namespace "default" au premier démarrage
+  # ---------------------------------------------------------------------------
+  temporal:
+    image: temporalio/auto-setup:1.29.6
+    container_name: temporal
+    restart: always
+    depends_on:
+      temporal-db:
+        condition: service_healthy
+    environment:
+      - DB=postgres12
+      - DB_PORT=5432
+      - POSTGRES_USER=temporal
+      - POSTGRES_PWD=${TEMPORAL_DB_PASSWORD}
+      - POSTGRES_SEEDS=temporal-db
+    ports:
+      - "7233:7233"
+      - "7243:7243"
+    healthcheck:
+      test: ["CMD", "temporal", "operator", "cluster", "health", "--address", "temporal:7233"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 30s
+    networks:
+      - factory-network
+
+  # ---------------------------------------------------------------------------
+  # Temporal UI — Interface web (EPIC-01 / US-05)
+  # ---------------------------------------------------------------------------
+  temporal-ui:
+    image: temporalio/ui:2.49.1
+    container_name: temporal-ui
+    restart: always
+    depends_on:
+      temporal:
+        condition: service_healthy
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_CORS_ORIGINS=http://localhost:8080
+    ports:
+      - "8080:8080"
+    networks:
+      - factory-network
+
+  # ---------------------------------------------------------------------------
+  # Temporal Worker de test — valide l'enregistrement d'un worker (EPIC-01 / US-05)
+  # Retry automatique jusqu'à ce que le namespace factory-test soit créé
+  # via setup-temporal.sh
+  # ---------------------------------------------------------------------------
+  temporal-worker-test:
+    build:
+      context: ./temporal-worker-test
+    container_name: temporal-worker-test
+    restart: always
+    environment:
+      - TEMPORAL_ADDRESS=temporal:7233
+      - TEMPORAL_NAMESPACE=factory-test
+    depends_on:
+      temporal:
+        condition: service_healthy
+    networks:
+      - factory-network
+
+  # ---------------------------------------------------------------------------
+  # MCP GitLab — Serveur MCP exposant les outils GitLab aux agents (EPIC-02)
+  # Build requis avant up : cd mcp/gitlab && npm run build
+  # ---------------------------------------------------------------------------
+  mcp-gitlab:
+    build:
+      context: ../mcp/gitlab
+      dockerfile: Dockerfile
+    container_name: mcp-gitlab
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      GITLAB_API_URL: "http://gitlab/api/v4"
+      GITLAB_API_TOKEN: "${GITLAB_API_TOKEN}"
+    expose:
+      - "3000"
+    ports:
+      - "3001:3000"
+    networks:
+      - factory-network
+    depends_on:
+      gitlab:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # MCP Temporal — Wrapper MCP exposant les outils Temporal aux agents (EPIC-02)
+  # Build requis avant up : cd mcp/temporal && npm run build
+  # ---------------------------------------------------------------------------
+  mcp-temporal:
+    build:
+      context: ../mcp/temporal
+      dockerfile: Dockerfile
+    container_name: mcp-temporal
+    restart: unless-stopped
+    environment:
+      PORT: "3000"
+      TEMPORAL_ADDRESS: "temporal:7233"
+      TEMPORAL_NAMESPACE: "factory-test"
+    expose:
+      - "3000"
+    ports:
+      - "3003:3000"
+    networks:
+      - factory-network
+    depends_on:
+      temporal:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Portainer CE — Monitoring et gestion des containers (UI web)
+  # UI HTTPS : http://localhost:9443  |  Edge agent tunnel : 8000
+  # ---------------------------------------------------------------------------
+  portainer:
+    image: portainer/portainer-ce:latest
+    container_name: portainer
+    restart: unless-stopped
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "8000:8000"
+      - "9443:9443"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - portainer_data:/data
+    networks:
+      - factory-network
+
+  # ---------------------------------------------------------------------------
+  # MCP SonarQube — Serveur MCP officiel SonarSource (EPIC-02)
+  # Image : mcp/sonarqube (https://hub.docker.com/r/mcp/sonarqube)
+  # ---------------------------------------------------------------------------
+  mcp-sonarqube:
+    image: mcp/sonarqube
+    container_name: mcp-sonarqube
+    restart: unless-stopped
+    environment:
+      SONAR_HOST_URL: "http://sonarqube:9000"
+      SONAR_TOKEN: "${SONARQUBE_AGENT_TOKEN}"
+    expose:
+      - "3000"
+    ports:
+      - "3002:3000"
+    networks:
+      - factory-network
+    depends_on:
+      sonarqube:
+        condition: service_healthy
+
+networks:
+  factory-network:
+    name: factory-network
+    driver: bridge
+
+volumes:
+  gitlab_config:
+  gitlab_logs:
+  gitlab_data:
+  gitlab_runner_config:
+  sonarqube_db:
+  sonarqube_data:
+  sonarqube_extensions:
+  sonarqube_logs:
+  temporal_db:
+  portainer_data:
