@@ -74,34 +74,199 @@ async function sendMessage(text: string) {
 </script>
 
 <template>
-  <div class="flex flex-col h-full bg-white">
-    <header class="shrink-0 border-b border-gray-200 px-6 py-4">
-      <h1 class="text-base font-semibold text-gray-900">Software Factory</h1>
-      <p class="text-xs text-gray-500 mt-0.5">Qualification de besoin</p>
+  <div class="shell">
+    <!-- Header -->
+    <header class="hdr">
+      <div class="hdr-inner">
+        <div class="brand">
+          <span class="brand-mark" aria-hidden="true">◈</span>
+          <span class="brand-name">Actual Software Factory</span>
+        </div>
+        <div v-if="isStreaming" class="hdr-status">
+          <span class="hdr-status-dot" />
+          <span class="hdr-status-lbl">processing</span>
+        </div>
+      </div>
     </header>
 
-    <div
-      v-if="messages.length === 0"
-      class="flex-1 flex items-center justify-center text-gray-400 text-sm select-none"
-    >
-      Décrivez votre besoin pour commencer…
+    <!-- Empty state -->
+    <div v-if="messages.length === 0" class="empty">
+      <div class="empty-inner">
+        <p class="empty-line">Décrivez votre besoin pour démarrer la qualification.</p>
+      </div>
     </div>
 
-    <div
-      v-else
-      ref="threadRef"
-      class="flex-1 overflow-y-auto"
-    >
+    <!-- Thread -->
+    <div v-else ref="threadRef" class="thread-scroll">
       <ChatThread :messages="messages" :is-streaming="isStreaming" />
     </div>
 
-    <div
-      v-if="error"
-      class="shrink-0 mx-4 mb-2 rounded-lg bg-red-50 border border-red-200 px-4 py-2 text-sm text-red-700"
-    >
-      {{ error }}
+    <!-- Error -->
+    <div v-if="error" class="err-bar">
+      <span class="err-tag">erreur</span>{{ error }}
     </div>
 
     <ChatInput :disabled="isStreaming" @send="sendMessage" />
   </div>
 </template>
+
+<!-- Global tokens + font import -->
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@300;400;500&display=swap');
+
+:root {
+  --bg:       #161412;
+  --surface:  #1d1a17;
+  --elevated: #242018;
+  --border:   #2d2925;
+  --border-2: #211e1b;
+  --hi:       #f0ebe2;   /* warm white — accent, interactive */
+  --txt:      #b8b0a5;   /* body text */
+  --txt-2:    #7a7368;   /* secondary */
+  --txt-3:    #484038;   /* muted */
+  --err:      #c0392b;
+  --mono:     'IBM Plex Mono', monospace;
+  --sans:     'Manrope', system-ui, sans-serif;
+}
+
+*, *::before, *::after { box-sizing: border-box; }
+html, body { margin: 0; padding: 0; background: var(--bg); }
+</style>
+
+<style scoped>
+.shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  background: var(--bg);
+  color: var(--txt);
+  font-family: var(--sans);
+}
+
+/* ── Header ──────────────────────────────────────────────── */
+
+.hdr {
+  flex-shrink: 0;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.hdr-inner {
+  max-width: 56rem;
+  margin: 0 auto;
+  padding: 0 1.5rem;
+  height: 3rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.brand-mark {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--hi);
+  line-height: 1;
+}
+
+.brand-name {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--hi);
+}
+
+.hdr-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.hdr-status-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--hi);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+.hdr-status-lbl {
+  font-family: var(--mono);
+  font-size: 0.5625rem;
+  letter-spacing: 0.1em;
+  color: var(--txt-2);
+}
+
+@keyframes pulse {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.25; }
+}
+
+/* ── Thread ──────────────────────────────────────────────── */
+
+.thread-scroll {
+  flex: 1;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+}
+
+.thread-scroll::-webkit-scrollbar        { width: 3px; }
+.thread-scroll::-webkit-scrollbar-track  { background: transparent; }
+.thread-scroll::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+
+/* ── Empty state ─────────────────────────────────────────── */
+
+.empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+}
+
+.empty-inner {
+  text-align: center;
+}
+
+.empty-line {
+  font-size: 0.875rem;
+  font-weight: 300;
+  color: var(--txt-3);
+  margin: 0;
+  line-height: 1.6;
+}
+
+/* ── Error ───────────────────────────────────────────────── */
+
+.err-bar {
+  flex-shrink: 0;
+  margin: 0.375rem 1.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(192, 57, 43, 0.25);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--err);
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  background: rgba(192, 57, 43, 0.06);
+}
+
+.err-tag {
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid rgba(192, 57, 43, 0.35);
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+</style>

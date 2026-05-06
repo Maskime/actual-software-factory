@@ -73,7 +73,7 @@ describe('IndexPage — sendMessage()', () => {
 
     await sendMessage(w)
 
-    expect(w.find('.bg-red-50').exists()).toBe(true)
+    expect(w.find('.err-bar').exists()).toBe(true)
     expect(w.text()).toContain('503')
   })
 
@@ -83,7 +83,7 @@ describe('IndexPage — sendMessage()', () => {
 
     await sendMessage(w)
 
-    expect(w.find('.bg-red-50').exists()).toBe(true)
+    expect(w.find('.err-bar').exists()).toBe(true)
     expect(w.text()).toContain('Network error')
   })
 
@@ -95,6 +95,6 @@ describe('IndexPage — sendMessage()', () => {
 
     // user message remains but empty assistant is spliced out
     expect(w.text()).toContain('test')
-    expect(w.find('.bg-red-50').exists()).toBe(true)
+    expect(w.find('.err-bar').exists()).toBe(true)
   })
 })

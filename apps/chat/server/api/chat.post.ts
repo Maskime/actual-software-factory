@@ -1,5 +1,6 @@
 import { defineEventHandler, readBody, setResponseHeader, sendStream, createError } from 'h3'
 import Anthropic from '@anthropic-ai/sdk'
+import { QUALIFICATION_PROMPT } from '../prompts/qualification'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -7,7 +8,6 @@ interface ChatMessage {
 }
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6'
-const DEFAULT_SYSTEM_PROMPT = 'Tu es un assistant de qualification de besoins logiciels pour la Software Factory.'
 
 export default defineEventHandler(async (event) => {
   const body = await readBody<{ messages?: ChatMessage[] }>(event)
@@ -22,7 +22,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const model = (config.anthropicModel as string) || DEFAULT_MODEL
-  const systemPrompt = (config.anthropicSystemPrompt as string) || DEFAULT_SYSTEM_PROMPT
+  const systemPrompt = (config.anthropicSystemPrompt as string) || QUALIFICATION_PROMPT
 
   setResponseHeader(event, 'Content-Type', 'text/event-stream; charset=utf-8')
   setResponseHeader(event, 'Cache-Control', 'no-cache')
