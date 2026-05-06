@@ -40,26 +40,32 @@ defineProps<{
 /* ── Streaming indicator ─────────────────────────────────── */
 
 .streaming {
-  border-left: 1px solid var(--border);
-  padding-left: 0.875rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--hi);
+  border-radius: 0 4px 4px 4px;
+  padding: 0.625rem 0.875rem;
+  max-width: 84%;
 }
 
 .streaming-label {
   font-family: var(--mono);
-  font-size: 0.5625rem;
-  letter-spacing: 0.12em;
-  color: var(--txt-3);
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+  color: var(--hi);
   text-transform: uppercase;
   margin-bottom: 0.375rem;
   user-select: none;
+  opacity: 0.55;
 }
 
 .streaming-cursor {
   display: inline-block;
-  width: 8px;
-  height: 1em;
-  background: var(--txt-3);
+  width: 7px;
+  height: 0.9em;
+  background: var(--hi);
   vertical-align: middle;
+  opacity: 0.45;
   animation: blink 1s step-end infinite;
 }
 
