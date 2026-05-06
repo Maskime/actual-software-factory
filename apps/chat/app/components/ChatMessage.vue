@@ -36,8 +36,7 @@ defineProps<{
   align-items: flex-start;
   gap: 0.5rem;
   max-width: 70%;
-  background: var(--elevated);
-  border: 1px solid var(--border);
+  background: var(--hi);
   border-radius: 6px 6px 2px 6px;
   padding: 0.625rem 0.875rem;
 }
@@ -45,7 +44,7 @@ defineProps<{
 .user-chevron {
   font-family: var(--mono);
   font-size: 0.875rem;
-  color: var(--hi);
+  color: var(--user-txt);
   line-height: 1.55;
   flex-shrink: 0;
   user-select: none;
@@ -53,7 +52,7 @@ defineProps<{
 
 .user-text {
   font-size: 0.8125rem;
-  color: var(--hi);
+  color: var(--user-txt);
   white-space: pre-wrap;
   word-break: break-words;
   line-height: 1.65;
@@ -70,18 +69,22 @@ defineProps<{
 
 .msg-asst {
   max-width: 84%;
-  border-left: 1px solid var(--border);
-  padding-left: 0.875rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-left: 2px solid var(--hi);
+  border-radius: 0 4px 4px 4px;
+  padding: 0.625rem 0.875rem;
 }
 
 .asst-label {
   font-family: var(--mono);
-  font-size: 0.5625rem;
-  letter-spacing: 0.12em;
-  color: var(--txt-3);
+  font-size: 0.5rem;
+  letter-spacing: 0.14em;
+  color: var(--hi);
   text-transform: uppercase;
   margin-bottom: 0.375rem;
   user-select: none;
+  opacity: 0.55;
 }
 
 .asst-text {

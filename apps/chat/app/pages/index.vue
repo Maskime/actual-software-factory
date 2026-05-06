@@ -115,18 +115,20 @@ async function sendMessage(text: string) {
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Manrope:wght@300;400;500&display=swap');
 
 :root {
-  --bg:       #161412;
-  --surface:  #1d1a17;
-  --elevated: #242018;
-  --border:   #2d2925;
-  --border-2: #211e1b;
-  --hi:       #f0ebe2;   /* warm white — accent, interactive */
-  --txt:      #b8b0a5;   /* body text */
-  --txt-2:    #7a7368;   /* secondary */
-  --txt-3:    #484038;   /* muted */
-  --err:      #c0392b;
-  --mono:     'IBM Plex Mono', monospace;
-  --sans:     'Manrope', system-ui, sans-serif;
+  --bg:        #f4f4f5;
+  --surface:   #ffffff;
+  --elevated:  #f4f4f5;
+  --border:    #e4e4e7;
+  --border-2:  #d4d4d8;
+  --hi:        #334155;  /* slate — accent, interactive */
+  --hdr-txt:   #f8fafc;  /* text on slate header */
+  --user-txt:  #f1f5f9;  /* text on slate user bubble */
+  --txt:       #3f3f46;  /* body text */
+  --txt-2:     #71717a;  /* secondary */
+  --txt-3:     #a1a1aa;  /* muted */
+  --err:       #dc2626;
+  --mono:      'IBM Plex Mono', monospace;
+  --sans:      'Manrope', system-ui, sans-serif;
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -214,12 +216,12 @@ html, body { margin: 0; padding: 0; background: var(--bg); }
   flex: 1;
   overflow-y: auto;
   scrollbar-width: thin;
-  scrollbar-color: var(--border) transparent;
+  scrollbar-color: var(--txt-3) transparent;
 }
 
 .thread-scroll::-webkit-scrollbar        { width: 3px; }
 .thread-scroll::-webkit-scrollbar-track  { background: transparent; }
-.thread-scroll::-webkit-scrollbar-thumb  { background: var(--border); border-radius: 2px; }
+.thread-scroll::-webkit-scrollbar-thumb  { background: var(--txt-3); border-radius: 2px; }
 
 /* ── Empty state ─────────────────────────────────────────── */
 
