@@ -4,4 +4,9 @@ export default defineNuxtConfig({
   },
   modules: ['@nuxtjs/tailwindcss'],
   devtools: { enabled: false },
+  runtimeConfig: {
+    anthropicApiKey: '',
+    anthropicModel: '',
+    anthropicSystemPrompt: '',
+  },
 })

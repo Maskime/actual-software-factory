@@ -58,7 +58,7 @@ async function sendMessage(text: string) {
     const response = await fetch('/api/chat', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: text }),
+      body: JSON.stringify({ messages: messages.value.slice(0, -1) }),
     })
     if (!response.ok) throw new Error(`Erreur serveur : ${response.status}`)
     await readSSEStream(response.body!.getReader(), assistantMsg)
