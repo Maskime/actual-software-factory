@@ -64,13 +64,47 @@ cp infrastructure/scripts/check-secrets.sh .git/hooks/pre-commit
 chmod +x .git/hooks/pre-commit
 ```
 
+### 1c. Chargement automatique des variables d'environnement (optionnel — direnv)
+
+Le fichier `.envrc` à la racine du projet est conçu pour fonctionner avec [direnv](https://direnv.net/). Il charge automatiquement `infrastructure/.env` dans ton shell dès que tu entres dans le répertoire du projet, sans avoir à sourcer manuellement le fichier à chaque session.
+
+**Pourquoi c'est utile :** les scripts de bootstrap, les commandes `docker compose`, et les outils CLI (comme `tctl`) s'appuient sur les variables d'environnement définies dans `infrastructure/.env`. Sans direnv, il faut préfixer chaque commande ou sourcer manuellement le fichier — avec direnv, tout est disponible automatiquement.
+
+**Installation de direnv :**
+
+```bash
+# Ubuntu / Debian / WSL2
+sudo apt install direnv
+
+# macOS
+brew install direnv
+```
+
+Ajoute ensuite le hook dans ton shell (une seule fois) :
+
+```bash
+# Pour bash — ajoute dans ~/.bashrc
+echo 'eval "$(direnv hook bash)"' >> ~/.bashrc && source ~/.bashrc
+
+# Pour zsh — ajoute dans ~/.zshrc
+echo 'eval "$(direnv hook zsh)"' >> ~/.zshrc && source ~/.zshrc
+```
+
+Puis autorise le `.envrc` du projet :
+
+```bash
+direnv allow .
+```
+
+À partir de là, les variables de `infrastructure/.env` sont chargées automatiquement à chaque `cd` dans le projet, et déchargées quand tu en sors.
+
 ### 2. Lancer les services
 
 Les serveurs MCP GitLab et Temporal sont buildés localement — compile le TypeScript avant le premier `up` (et après chaque modification des sources) :
 
 ```bash
-cd mcp/gitlab && npm install && npm run build && cd -
-cd mcp/temporal && npm install && npm run build && cd -
+npm install   # installe toutes les dépendances (workspaces npm)
+npm run build # compile tous les packages (mcp/gitlab, mcp/temporal, …)
 ```
 
 Lance ensuite toute la stack :
@@ -170,10 +204,36 @@ Après le bootstrap complet (scripts individuels ou `setup-all.sh`), la connexio
 
 > **Prérequis :** un Personal Access Token GitLab est requis pour enregistrer ce paramètre. Tu peux en créer un via **GitLab → User Settings → Access Tokens**.
 
+## Application web de qualification (Chat UI)
+
+Interface conversationnelle permettant de qualifier un besoin et de générer des tickets GitLab.
+
+**Prérequis :** Node 22+
+
+```bash
+# Démarrage dev (hot-reload)
+make dev-chat
+# ou directement :
+npm run dev --workspace=apps/chat
+```
+
+URL par défaut : `http://localhost:3000`
+
+Variable d'environnement : `NUXT_PORT` (défaut : `3000`).
+Copier `apps/chat/.env.example` vers `apps/chat/.env` pour personnaliser.
+
+En production (Docker), le service est inclus dans `docker-compose.yml` :
+```bash
+docker compose -f infrastructure/docker-compose.yml up -d chat
+```
+
+---
+
 ## Services
 
 | Service | URL | Credentials |
 |---|---|---|
+| Chat UI | http://localhost:3000 | — (accès local, pas d'auth) |
 | GitLab CE | http://localhost | `root` / `GITLAB_ROOT_PASSWORD` |
 | GitLab SSH | ssh://localhost:2222 | — |
 | SonarQube | http://localhost:9000 | `admin` / `SONARQUBE_ADMIN_PASSWORD` |
@@ -208,87 +268,13 @@ Configuration Claude Code (`.mcp.json` à la racine du projet) :
 
 ## Tests MCP (round-trip)
 
-Les tests valident de bout en bout que chaque serveur MCP répond correctement à des séquences réalistes de création / lecture / modification / nettoyage, exactement comme un agent Claude le ferait.
-
-### Prérequis
-
-Les trois serveurs MCP doivent être démarrés et les builds TypeScript à jour :
-
-```bash
-# Build (une fois, ou après modification des sources)
-cd mcp/gitlab && npm install && npm run build && cd -
-cd mcp/temporal && npm install && npm run build && cd -
-
-# Démarrer les services
-docker compose -f infrastructure/docker-compose.yml up -d \
-  gitlab sonarqube temporal temporal-worker-test \
-  mcp-gitlab mcp-sonarqube mcp-temporal
-
-# Installer les dépendances du package de tests (une fois)
-cd mcp/tests && npm install && cd -
-```
-
-### Lancer les tests
-
 ```bash
 make test-mcp
 ```
 
-Les variables d'environnement sont chargées automatiquement depuis `infrastructure/.env`. Les trois suites s'exécutent séquentiellement.
+Valide de bout en bout que chaque serveur MCP répond correctement (GitLab, SonarQube, Temporal). Si un serveur n'est pas joignable, sa suite s'affiche `⚠ SKIPPED` et les autres continuent.
 
-### Ce que testent les suites
-
-| Suite | Serveur | Ce qui est vérifié |
-|---|---|---|
-| **GitLab** | `localhost:3001` | create / read / update issue → create branch → commit → get file → list tree → create MR → comment → read MR → read diff → cleanup |
-| **SonarQube** | `localhost:3002` | découverte des outils disponibles, appel issues / quality gate / measures avec le projet `SONARQUBE_TEST_PROJECT_KEY` |
-| **Temporal** | `localhost:3003` | démarrage `PingWorkflow` → list workflows → get status → send signal "ping" → attente complétion → vérification état `Completed` |
-
-### Résultat attendu
-
-```
-=== MCP Round-Trip Tests ===
-  GitLab   : http://localhost:3001/mcp
-  SonarQube: http://localhost:3002/mcp
-  Temporal : http://localhost:3003/mcp
-
-[GitLab MCP]
-  ✓ gitlab_create_issue
-  ✓ gitlab_get_issue
-  ...
-  Summary: 13 passed, 0 failed
-
-[SonarQube MCP]
-  ✓ list available tools
-  ✓ sonar_search_issues
-  ...
-
-[Temporal MCP]
-  ✓ start PingWorkflow (SDK direct)
-  ✓ temporal_list_workflows
-  ✓ temporal_get_workflow_status
-  ✓ temporal_send_signal
-  ✓ wait for PingWorkflow completion
-  ✓ temporal_get_workflow_status (final)
-  Summary: 6 passed, 0 failed
-
-=== Global: 25 passed, 0 failed ===
-```
-
-Si un serveur n'est pas joignable, sa suite s'affiche `⚠ SKIPPED` et les autres continuent.
-
-### Variables optionnelles
-
-| Variable | Défaut | Description |
-|---|---|---|
-| `GITLAB_TEST_PROJECT_PATH` | `root/factory-test` | Chemin du projet GitLab utilisé pour les tests |
-| `SONARQUBE_TEST_PROJECT_KEY` | `factory-test` | Clé du projet SonarQube analysé |
-| `TEMPORAL_ADDRESS` | `localhost:7233` | Adresse gRPC Temporal (pour démarrer les workflows) |
-| `TEMPORAL_NAMESPACE` | `factory-test` | Namespace Temporal des workflows de test |
-| `TEMPORAL_TEST_TIMEOUT_MS` | `30000` | Timeout (ms) d'attente de complétion du workflow |
-| `MCP_GITLAB_URL` | `http://localhost:3001/mcp` | URL du serveur MCP GitLab |
-| `MCP_SONARQUBE_URL` | `http://localhost:3002/mcp` | URL du serveur MCP SonarQube |
-| `MCP_TEMPORAL_URL` | `http://localhost:3003/mcp` | URL du serveur MCP Temporal |
+Voir [docs/mcp-tests.md](docs/mcp-tests.md) pour le détail des suites, le résultat attendu et les variables optionnelles.
 
 ## Rotation des secrets
 
@@ -315,130 +301,4 @@ docker compose -f infrastructure/docker-compose.yml down -v
 
 ## Résolution de problèmes
 
-**GitLab ignore `GITLAB_ROOT_PASSWORD` au premier démarrage**
-
-```bash
-docker exec gitlab cat /etc/gitlab/initial_root_password
-```
-
-Ce fichier est supprimé automatiquement 24h après le premier démarrage.
-
-**Le runner ne s'enregistre pas**
-
-Vérifie que `factory-runner` n'est pas déjà présent :
-
-```bash
-docker exec gitlab-runner gitlab-runner list
-```
-
-Relance `setup-gitlab.sh` si nécessaire (idempotent).
-
-**SonarQube / Elasticsearch : `vm.max_map_count` trop bas**
-
-```bash
-sudo sysctl -w vm.max_map_count=524288
-# Pour persister :
-echo 'vm.max_map_count=524288' | sudo tee /etc/sysctl.d/sonarqube.conf && sudo sysctl --system
-```
-
-**SonarQube ne démarre pas après `docker compose up`**
-
-Vérifie les logs Elasticsearch intégrés :
-
-```bash
-docker logs sonarqube | grep -i "error\|exception\|max_map"
-```
-
-**Temporal : `tctl cluster health` échoue**
-
-Le serveur Temporal met 30 à 60 secondes à initialiser le schéma PostgreSQL au premier démarrage. Attendre et relancer `setup-temporal.sh`.
-
-```bash
-docker logs temporal | tail -20
-```
-
-**Temporal : worker en boucle retry (`Namespace not found`)**
-
-C'est le comportement attendu tant que `setup-temporal.sh` n'a pas été exécuté. Lancer le script pour créer le namespace `factory-test` :
-
-```bash
-bash infrastructure/scripts/setup-temporal.sh
-```
-
-**Temporal : aucun poller visible dans l'UI après le bootstrap**
-
-Vérifier que le conteneur worker tourne et s'est connecté :
-
-```bash
-docker logs temporal-worker-test
-docker exec temporal tctl --namespace factory-test taskqueue describe --taskqueue factory-test-queue
-```
-
-**MCP GitLab : `mcp-gitlab` ne démarre pas**
-
-Le container exige que `mcp/gitlab/dist/` existe. Si le build n'a pas été fait :
-
-```bash
-cd mcp/gitlab && npm install && npm run build && cd -
-docker compose -f infrastructure/docker-compose.yml up -d --build mcp-gitlab
-```
-
-**MCP GitLab : erreur d'authentification au démarrage**
-
-```bash
-docker logs mcp-gitlab
-```
-
-Vérifier que `GITLAB_API_TOKEN` dans `infrastructure/.env` a les scopes `api` et `read_repository`, et que GitLab est healthy avant de démarrer `mcp-gitlab`.
-
-**MCP SonarQube : container en attente de SonarQube**
-
-`mcp-sonarqube` démarre uniquement après que le healthcheck SonarQube passe. Si SonarQube met du temps, le container attend automatiquement grâce au `depends_on: condition: service_healthy`.
-
-```bash
-docker logs mcp-sonarqube
-```
-
-**MCP Temporal : `mcp-temporal` ne démarre pas**
-
-Le container exige que `mcp/temporal/dist/` existe. Si le build n'a pas été fait :
-
-```bash
-cd mcp/temporal && npm install && npm run build && cd -
-docker compose -f infrastructure/docker-compose.yml up -d --build mcp-temporal
-```
-
-**Tests MCP : suite Temporal en échec (`PingWorkflow` introuvable)**
-
-Le worker `temporal-worker-test` doit être démarré et connecté au namespace `factory-test` avant de lancer les tests. Vérifier :
-
-```bash
-docker logs temporal-worker-test
-# Doit afficher : "Worker connected — polling factory-test-queue"
-```
-
-Si le namespace n'existe pas encore, lancer `setup-temporal.sh` d'abord.
-
-**Tests MCP : `make test-mcp` échoue avec `Cannot find module`**
-
-Les dépendances du package de tests n'ont pas été installées :
-
-```bash
-cd mcp/tests && npm install && cd -
-make test-mcp
-```
-
-**Tests MCP : suite GitLab en échec (`root/factory-test` introuvable)**
-
-Le projet de test doit exister dans GitLab. Lancer `setup-gitlab.sh` ou définir `GITLAB_TEST_PROJECT_PATH` dans `infrastructure/.env` avec le chemin `namespace/projet` correct.
-
-**Mot de passe admin SonarQube oublié**
-
-Relancer `setup-sonarqube.sh` ne fonctionnera plus si ni `admin` ni le mot de passe configuré n'est connu. Réinitialisation via la base :
-
-```bash
-docker exec -it sonarqube-db psql -U sonar -c \
-  "UPDATE users SET crypted_password = '\$2a\$12\$uCkkXmhW5ThVK8mpBvnXOOJRLd64LJeHTeCkSKiXELNi5GNL9wd9m', salt='', hash_method='BCRYPT' WHERE login='admin';"
-```
-
-(remet le mot de passe à `admin`, puis relancer `setup-sonarqube.sh`)
+Voir [docs/troubleshooting.md](docs/troubleshooting.md).

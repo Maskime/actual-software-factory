@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type GitLabClient, GitLabApiError } from "../gitlab-client.js";
+import { type GitLabClient, type ToolResult, GitLabApiError } from "../gitlab-client.js";
 
 interface GitLabBranch {
   name: string;
@@ -32,11 +32,11 @@ interface GitLabTreeEntry {
   mode: string;
 }
 
-function projectPath(projectId: string): string {
+export function projectPath(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}`;
 }
 
-function errorResponse(err: unknown) {
+export function errorResponse(err: unknown) {
   if (err instanceof GitLabApiError) {
     return {
       content: [
@@ -75,7 +75,7 @@ export const createBranchSchema = z.object({
 export async function handleCreateBranch(
   client: GitLabClient,
   params: z.infer<typeof createBranchSchema>
-) {
+): Promise<ToolResult> {
   try {
     const branch = await client.post<GitLabBranch>(
       `${projectPath(params.project_id)}/repository/branches`,
@@ -105,7 +105,7 @@ export const listBranchesSchema = z.object({
 export async function handleListBranches(
   client: GitLabClient,
   params: z.infer<typeof listBranchesSchema>
-) {
+): Promise<ToolResult> {
   try {
     const queryParams: Record<string, unknown> = { per_page: 100 };
     if (params.search !== undefined) queryParams.search = params.search;
@@ -171,7 +171,7 @@ export const commitFilesSchema = z.object({
 export async function handleCommitFiles(
   client: GitLabClient,
   params: z.infer<typeof commitFilesSchema>
-) {
+): Promise<ToolResult> {
   for (const a of params.actions) {
     if ((a.action === "create" || a.action === "update") && a.content === undefined) {
       return {
@@ -284,7 +284,7 @@ export const getFileSchema = z.object({
 export async function handleGetFile(
   client: GitLabClient,
   params: z.infer<typeof getFileSchema>
-) {
+): Promise<ToolResult> {
   try {
     const encodedFilePath = encodeURIComponent(params.file_path);
     const file = await client.get<GitLabFile>(
@@ -321,7 +321,7 @@ export const deleteBranchSchema = z.object({
 export async function handleDeleteBranch(
   client: GitLabClient,
   params: z.infer<typeof deleteBranchSchema>
-) {
+): Promise<ToolResult> {
   try {
     await client.delete<void>(
       `${projectPath(params.project_id)}/repository/branches/${encodeURIComponent(params.branch)}`
@@ -362,7 +362,7 @@ export const getRepositoryTreeSchema = z.object({
 export async function handleGetRepositoryTree(
   client: GitLabClient,
   params: z.infer<typeof getRepositoryTreeSchema>
-) {
+): Promise<ToolResult> {
   try {
     const queryParams: Record<string, unknown> = { per_page: 100 };
     if (params.path !== undefined) queryParams.path = params.path;

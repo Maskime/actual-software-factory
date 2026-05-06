@@ -1,9 +1,9 @@
 import { z } from "zod";
-import type { GitLabClient } from "../gitlab-client.js";
+import { type GitLabClient, type ToolResult } from "../gitlab-client.js";
 
 export const checkAuthSchema = z.object({});
 
-export async function handleCheckAuth(client: GitLabClient) {
+export async function handleCheckAuth(client: GitLabClient): Promise<ToolResult> {
   try {
     const user = await client.validateAuth();
     return {

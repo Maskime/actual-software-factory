@@ -22,13 +22,18 @@ export class GitLabApiError extends Error {
   }
 }
 
+export type ToolResult = {
+  content: Array<{ type: 'text'; text: string }>
+  isError?: boolean
+}
+
 export interface GitLabUser {
   id: number;
   username: string;
   name: string;
 }
 
-function getRetryDelay(retryCount: number, error: AxiosError): number {
+export function getRetryDelay(retryCount: number, error: AxiosError): number {
   const retryAfterHeader = error.response?.headers["retry-after"];
   if (retryAfterHeader) {
     const seconds = parseInt(String(retryAfterHeader), 10);

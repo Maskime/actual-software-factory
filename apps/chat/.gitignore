@@ -1,0 +1,9 @@
+# Nuxt generated
+.nuxt/
+.output/
+
+# Dependencies
+node_modules/
+
+# Local env
+.env
