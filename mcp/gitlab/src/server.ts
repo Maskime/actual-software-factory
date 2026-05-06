@@ -12,6 +12,8 @@ import {
   handleUpdateIssue,
   closeIssueSchema,
   handleCloseIssue,
+  createIssueLinkSchema,
+  handleCreateIssueLink,
 } from "./tools/issues.js";
 import {
   createMrSchema,
@@ -88,6 +90,13 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     "Close an open GitLab issue. Returns a confirmation with the final state and URL.",
     closeIssueSchema.shape,
     (params) => handleCloseIssue(client, params)
+  );
+
+  server.tool(
+    "gitlab_create_issue_link",
+    "Create a link between two GitLab issues. Supported link types: relates_to (default), blocks, is_blocked_by. Links are visible in the 'Linked issues' section of each issue. Returns source/target IIDs, link type, and URLs.",
+    createIssueLinkSchema.shape,
+    (params) => handleCreateIssueLink(client, params)
   );
 
   server.tool(

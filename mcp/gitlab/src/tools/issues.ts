@@ -268,3 +268,56 @@ export async function handleCloseIssue(
     return errorResponse(err);
   }
 }
+
+// gitlab_create_issue_link
+
+interface GitLabIssueLink {
+  source_issue: { iid: number; web_url: string };
+  target_issue: { iid: number; web_url: string };
+  link_type: string;
+}
+
+export const createIssueLinkSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  issue_iid: z.number().int().positive().describe("Source issue IID"),
+  target_project_id: z.string().describe("Target project ID (can be same as project_id)"),
+  target_issue_iid: z.number().int().positive().describe("Target issue IID to link to"),
+  link_type: z
+    .enum(["relates_to", "blocks", "is_blocked_by"])
+    .optional()
+    .describe("Link type (default: relates_to)"),
+});
+
+export async function handleCreateIssueLink(
+  client: GitLabClient,
+  params: z.infer<typeof createIssueLinkSchema>
+): Promise<ToolResult> {
+  try {
+    const body: Record<string, unknown> = {
+      target_project_id: params.target_project_id,
+      target_issue_iid: params.target_issue_iid,
+    };
+    if (params.link_type !== undefined) body.link_type = params.link_type;
+
+    const link = await client.post<GitLabIssueLink>(
+      `${projectPath(params.project_id)}/issues/${params.issue_iid}/links`,
+      body
+    );
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            source_issue_iid: link.source_issue.iid,
+            target_issue_iid: link.target_issue.iid,
+            link_type: link.link_type,
+            source_url: link.source_issue.web_url,
+            target_url: link.target_issue.web_url,
+          }),
+        },
+      ],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
