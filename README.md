@@ -210,6 +210,25 @@ Interface conversationnelle permettant de qualifier un besoin et de générer de
 
 **Prérequis :** Node 22+
 
+### Configuration
+
+Copier le fichier d'exemple et le remplir :
+
+```bash
+cp apps/chat/.env.example apps/chat/.env
+```
+
+| Variable | Obligatoire | Description |
+|---|---|---|
+| `NUXT_ANTHROPIC_API_KEY` | ✅ | Clé API Anthropic (`sk-ant-…`) — récupérable sur [console.anthropic.com](https://console.anthropic.com) |
+| `NUXT_ANTHROPIC_MODEL` | Non | Modèle Claude à utiliser (défaut : `claude-sonnet-4-6`) |
+| `NUXT_ANTHROPIC_SYSTEM_PROMPT` | Non | System prompt injecté côté serveur (défaut intégré si absent) |
+| `NUXT_PORT` | Non | Port d'écoute du serveur Nuxt (défaut : `3000`) |
+
+> **Sécurité :** `apps/chat/.env` est gitignored. La clé `NUXT_ANTHROPIC_API_KEY` n'est jamais transmise au navigateur — elle est lue exclusivement côté serveur.
+
+### Démarrage
+
 ```bash
 # Démarrage dev (hot-reload)
 make dev-chat
@@ -218,9 +237,6 @@ npm run dev --workspace=apps/chat
 ```
 
 URL par défaut : `http://localhost:3000`
-
-Variable d'environnement : `NUXT_PORT` (défaut : `3000`).
-Copier `apps/chat/.env.example` vers `apps/chat/.env` pour personnaliser.
 
 En production (Docker), le service est inclus dans `docker-compose.yml` :
 ```bash

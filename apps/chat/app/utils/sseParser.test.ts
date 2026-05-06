@@ -29,4 +29,12 @@ describe('parseSSELine', () => {
   it('returns undefined when prefix has no space after colon', () => {
     expect(parseSSELine('data:hello')).toBeUndefined()
   })
+
+  it('JSON-decodes a quoted string value', () => {
+    expect(parseSSELine('data: "hello world"')).toBe('hello world')
+  })
+
+  it('JSON-decodes a string containing an escaped newline', () => {
+    expect(parseSSELine('data: "line1\\nline2"')).toBe('line1\nline2')
+  })
 })
