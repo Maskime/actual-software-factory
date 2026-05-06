@@ -40,6 +40,21 @@ vi.mock('@anthropic-ai/sdk', () => {
 import handler from './chat.post'
 import * as h3 from 'h3'
 import Anthropic from '@anthropic-ai/sdk'
+import { QUALIFICATION_PROMPT } from '../prompts/qualification'
+
+describe('QUALIFICATION_PROMPT content', () => {
+  it('covers the 4 required dimensions', () => {
+    const lower = QUALIFICATION_PROMPT.toLowerCase()
+    expect(lower).toContain('contexte')
+    expect(lower).toContain('objectif')
+    expect(lower).toContain('contraintes')
+    expect(lower).toContain('done')
+  })
+
+  it('encodes the 3-question limit rule', () => {
+    expect(QUALIFICATION_PROMPT).toContain('3')
+  })
+})
 
 const mockConfig = {
   anthropicApiKey: 'test-api-key',
@@ -127,6 +142,31 @@ describe('chat.post handler', () => {
 
     await expect((handler as Function)(mockEvent)).rejects.toMatchObject({ statusCode: 500 })
     expect(h3.setResponseHeader).not.toHaveBeenCalled()
+  })
+
+  it('uses QUALIFICATION_PROMPT when anthropicSystemPrompt is empty', async () => {
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'hi' }] })
+    vi.stubGlobal('useRuntimeConfig', vi.fn().mockReturnValue({ ...mockConfig, anthropicSystemPrompt: '' }))
+
+    const MockAnthropic = Anthropic as unknown as ReturnType<typeof vi.fn>
+    const streamSpy = vi.fn().mockReturnValue({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }
+      },
+    })
+    MockAnthropic.mockImplementation(() => ({ messages: { stream: streamSpy } }))
+
+    vi.mocked(h3.sendStream).mockResolvedValue(undefined)
+
+    await (handler as Function)(mockEvent)
+
+    expect(streamSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        system: expect.arrayContaining([
+          expect.objectContaining({ text: QUALIFICATION_PROMPT }),
+        ]),
+      }),
+    )
   })
 
   it('sends [ERROR] SSE chunk when Anthropic API throws mid-stream', async () => {

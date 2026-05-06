@@ -137,7 +137,52 @@ Exécute le plan validé : crée et modifie les fichiers, lance les tests et le 
 
 ---
 
-## Étape 12 — Résumé final
+## Étape 12 — Commit & Push
+
+Committe tous les fichiers modifiés et pousse la branche :
+
+```bash
+git add -A
+git commit -m "feat(<scope>): <résumé du ticket en une ligne> (#<id>)"
+git push -u origin feature/<id>
+```
+
+Le message de commit doit refléter le titre du ticket. Le scope est le module principal modifié (ex: `chat`, `mcp-gitlab`, `infra`).
+
+---
+
+## Étape 13 — Création de la Merge Request
+
+Utilise l'outil `mcp__gitlab__gitlab_create_mr` avec :
+- `project_id` : `3`
+- `source_branch` : `feature/<id>`
+- `target_branch` : `main`
+- `title` : `<TITRE>` (le titre exact du ticket GitLab)
+- `description` : construit selon le modèle ci-dessous
+
+Modèle de description MR :
+
+```
+Closes #<id>
+
+## Résumé
+
+<Une ou deux phrases décrivant ce qui a été implémenté.>
+
+## Critères satisfaits
+
+<Liste des critères d'acceptation cochés>
+
+## Notes techniques
+
+<Points d'attention pour le reviewer, choix architecturaux notables, limitations connues — ou "RAS" si rien à signaler.>
+```
+
+Affiche l'URL de la MR créée.
+
+---
+
+## Étape 14 — Résumé final
 
 Affiche :
 
@@ -146,4 +191,5 @@ Ticket #<id> implémenté ✓
 Critères satisfaits : <liste>
 Feedbacks MAJEUR traités : <liste ou "aucun">
 Lint : <OK | erreurs>
+MR : <URL>
 ```
