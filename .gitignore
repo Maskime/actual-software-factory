@@ -25,3 +25,5 @@ secrets/
 *.token
 **/node_modules
 **/dist
+
+**/coverage

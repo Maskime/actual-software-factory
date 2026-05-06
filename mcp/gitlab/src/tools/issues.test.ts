@@ -1,0 +1,120 @@
+import { vi, describe, it, expect } from 'vitest'
+import { GitLabApiError } from '../gitlab-client.js'
+import type { GitLabClient } from '../gitlab-client.js'
+import {
+  handleGetIssue,
+  handleListIssues,
+  handleCreateIssue,
+  handleUpdateIssue,
+  handleCloseIssue,
+} from './issues.js'
+
+const baseIssue = {
+  id: 10, iid: 1, title: 'Bug', description: 'desc', state: 'opened' as const,
+  labels: ['bug'], assignees: [], web_url: 'http://gl/issues/1',
+}
+
+describe('handleGetIssue()', () => {
+  it('returns issue data on success', async () => {
+    const client = { get: vi.fn().mockResolvedValue(baseIssue) } as unknown as GitLabClient
+    const result = await handleGetIssue(client, { project_id: '3', issue_iid: 1 })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.iid).toBe(1)
+    expect(parsed.title).toBe('Bug')
+    expect(parsed.state).toBe('opened')
+  })
+
+  it('returns errorResponse on API error', async () => {
+    const client = { get: vi.fn().mockRejectedValue(new GitLabApiError('not found', 404, 'GITLAB_NOT_FOUND')) } as unknown as GitLabClient
+    const result = await handleGetIssue(client, { project_id: '3', issue_iid: 99 })
+    expect(result.isError).toBe(true)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.error.code).toBe('GITLAB_NOT_FOUND')
+  })
+})
+
+describe('handleListIssues()', () => {
+  it('returns list of issues on success', async () => {
+    const client = { get: vi.fn().mockResolvedValue([baseIssue]) } as unknown as GitLabClient
+    const result = await handleListIssues(client, { project_id: '3' })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0].iid).toBe(1)
+  })
+
+  it('passes state, labels, assignee_username and page params', async () => {
+    const mockGet = vi.fn().mockResolvedValue([])
+    const client = { get: mockGet } as unknown as GitLabClient
+    await handleListIssues(client, { project_id: '3', state: 'closed', labels: 'bug', assignee_username: 'alice', page: 2 })
+    const params = mockGet.mock.calls[0][1] as Record<string, unknown>
+    expect(params.state).toBe('closed')
+    expect(params.labels).toBe('bug')
+    expect(params.assignee_username).toBe('alice')
+    expect(params.page).toBe(2)
+  })
+
+  it('returns errorResponse on API error', async () => {
+    const client = { get: vi.fn().mockRejectedValue(new GitLabApiError('fail', 500, 'GITLAB_API_ERROR')) } as unknown as GitLabClient
+    const result = await handleListIssues(client, { project_id: '3' })
+    expect(result.isError).toBe(true)
+  })
+})
+
+describe('handleCreateIssue()', () => {
+  it('returns iid, id and web_url on success', async () => {
+    const client = { post: vi.fn().mockResolvedValue(baseIssue) } as unknown as GitLabClient
+    const result = await handleCreateIssue(client, { project_id: '3', title: 'Bug' })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.iid).toBe(1)
+    expect(parsed.id).toBe(10)
+    expect(parsed.web_url).toBeTruthy()
+  })
+
+  it('includes optional description and labels in body', async () => {
+    const mockPost = vi.fn().mockResolvedValue(baseIssue)
+    const client = { post: mockPost } as unknown as GitLabClient
+    await handleCreateIssue(client, { project_id: '3', title: 'Bug', description: 'desc', labels: 'bug,urgent' })
+    const body = mockPost.mock.calls[0][1] as Record<string, unknown>
+    expect(body.description).toBe('desc')
+    expect(body.labels).toBe('bug,urgent')
+  })
+
+  it('returns errorResponse on API error', async () => {
+    const client = { post: vi.fn().mockRejectedValue(new GitLabApiError('fail', 500, 'GITLAB_API_ERROR')) } as unknown as GitLabClient
+    const result = await handleCreateIssue(client, { project_id: '3', title: 'Bug' })
+    expect(result.isError).toBe(true)
+  })
+})
+
+describe('handleUpdateIssue()', () => {
+  it('returns updated issue on success', async () => {
+    const updated = { ...baseIssue, title: 'Fixed bug', state: 'closed' as const }
+    const client = { put: vi.fn().mockResolvedValue(updated) } as unknown as GitLabClient
+    const result = await handleUpdateIssue(client, { project_id: '3', issue_iid: 1, title: 'Fixed bug', state_event: 'close' })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.title).toBe('Fixed bug')
+    expect(parsed.state).toBe('closed')
+  })
+
+  it('returns errorResponse on API error', async () => {
+    const client = { put: vi.fn().mockRejectedValue(new GitLabApiError('fail', 500, 'GITLAB_API_ERROR')) } as unknown as GitLabClient
+    const result = await handleUpdateIssue(client, { project_id: '3', issue_iid: 1 })
+    expect(result.isError).toBe(true)
+  })
+})
+
+describe('handleCloseIssue()', () => {
+  it('returns closed: true when state is closed', async () => {
+    const client = { put: vi.fn().mockResolvedValue({ ...baseIssue, state: 'closed' }) } as unknown as GitLabClient
+    const result = await handleCloseIssue(client, { project_id: '3', issue_iid: 1 })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.closed).toBe(true)
+    expect(parsed.state).toBe('closed')
+  })
+
+  it('returns errorResponse on API error', async () => {
+    const client = { put: vi.fn().mockRejectedValue(new GitLabApiError('fail', 500, 'GITLAB_API_ERROR')) } as unknown as GitLabClient
+    const result = await handleCloseIssue(client, { project_id: '3', issue_iid: 1 })
+    expect(result.isError).toBe(true)
+  })
+})

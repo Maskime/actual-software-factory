@@ -276,8 +276,11 @@ services:
     container_name: mcp-sonarqube
     restart: unless-stopped
     environment:
-      SONAR_HOST_URL: "http://sonarqube:9000"
-      SONAR_TOKEN: "${SONARQUBE_AGENT_TOKEN}"
+      SONARQUBE_URL: "http://sonarqube:9000"
+      SONARQUBE_TOKEN: "${SONARQUBE_AGENT_TOKEN}"
+      SONARQUBE_TRANSPORT: "http"
+      SONARQUBE_HTTP_HOST: "0.0.0.0"
+      SONARQUBE_HTTP_PORT: "3000"
     expose:
       - "3000"
     ports:
@@ -287,6 +290,23 @@ services:
     depends_on:
       sonarqube:
         condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Chat UI — Application web de qualification (EPIC-03 / US-01)
+  # Port hôte 3000 est libre (mcp-gitlab occupe 3001:3000)
+  # ---------------------------------------------------------------------------
+  chat:
+    build:
+      context: ../apps/chat
+      dockerfile: Dockerfile
+    container_name: chat
+    restart: unless-stopped
+    environment:
+      NUXT_PORT: "3000"
+    ports:
+      - "${NUXT_PORT:-3000}:3000"
+    networks:
+      - factory-network
 
 networks:
   factory-network:

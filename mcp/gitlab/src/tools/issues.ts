@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type GitLabClient, GitLabApiError } from "../gitlab-client.js";
+import { type GitLabClient, type ToolResult, GitLabApiError } from "../gitlab-client.js";
 
 interface GitLabIssue {
   id: number;
@@ -12,11 +12,11 @@ interface GitLabIssue {
   web_url: string;
 }
 
-function projectPath(projectId: string): string {
+export function projectPath(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}`;
 }
 
-function errorResponse(err: unknown) {
+export function errorResponse(err: unknown) {
   if (err instanceof GitLabApiError) {
     return {
       content: [
@@ -51,7 +51,7 @@ export const getIssueSchema = z.object({
 export async function handleGetIssue(
   client: GitLabClient,
   params: z.infer<typeof getIssueSchema>
-) {
+): Promise<ToolResult> {
   try {
     const issue = await client.get<GitLabIssue>(
       `${projectPath(params.project_id)}/issues/${params.issue_iid}`
@@ -104,7 +104,7 @@ export const listIssuesSchema = z.object({
 export async function handleListIssues(
   client: GitLabClient,
   params: z.infer<typeof listIssuesSchema>
-) {
+): Promise<ToolResult> {
   try {
     const queryParams: Record<string, unknown> = { per_page: 100 };
     if (params.state !== undefined) queryParams.state = params.state;
@@ -155,7 +155,7 @@ export const createIssueSchema = z.object({
 export async function handleCreateIssue(
   client: GitLabClient,
   params: z.infer<typeof createIssueSchema>
-) {
+): Promise<ToolResult> {
   try {
     const body: Record<string, unknown> = { title: params.title };
     if (params.description !== undefined) body.description = params.description;
@@ -202,7 +202,7 @@ export const updateIssueSchema = z.object({
 export async function handleUpdateIssue(
   client: GitLabClient,
   params: z.infer<typeof updateIssueSchema>
-) {
+): Promise<ToolResult> {
   try {
     const body: Record<string, unknown> = {};
     if (params.title !== undefined) body.title = params.title;
@@ -245,7 +245,7 @@ export const closeIssueSchema = z.object({
 export async function handleCloseIssue(
   client: GitLabClient,
   params: z.infer<typeof closeIssueSchema>
-) {
+): Promise<ToolResult> {
   try {
     const issue = await client.put<GitLabIssue>(
       `${projectPath(params.project_id)}/issues/${params.issue_iid}`,

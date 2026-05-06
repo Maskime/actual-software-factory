@@ -15,6 +15,7 @@ Software Factory is an automated development pipeline where AI agents handle the
 | Workflow orchestration | Temporal | On-prem (Docker) |
 | LLM | Claude (Anthropic API) | Cloud |
 | Agent ↔ tool communication | MCP servers | On-prem |
+| Requirements qualification UI | Nuxt 4 + Tailwind CSS | Local / Docker (`apps/chat/`) |
 
 **Application language: TypeScript (strict mode)**
 
@@ -27,6 +28,14 @@ All frontend/UI work must use Vue.js (Vue 3 Composition API) as the base framewo
 **MCP servers: HTTP transport, containerized**
 
 Every MCP server must be deployed as its own Docker container in `infrastructure/docker-compose.yml` and joined to `factory-network`. All MCP communication uses the HTTP transport (Streamable HTTP) — never stdio. Agents connect to MCP servers via HTTP URL (e.g. `http://mcp-gitlab:3000/mcp`). Do not use `StdioServerTransport` anywhere in the codebase.
+
+## Dependency management
+
+When adding a new dependency to any package in this project:
+
+1. **Always check the latest stable version** before installing — use `npm info <package> version` or look up the package on npmjs.com / the official GitHub releases page.
+2. **Install the latest stable version** (never rely on an unpinned `npm install <package>` which may resolve to an outdated cached version).
+3. **If the latest stable version introduces a breaking change** or incompatibility with the current codebase, do not downgrade silently — **report it to the operator** and describe the conflict. The operator decides whether to pin an older version, adapt the code, or defer the dependency.
 
 ## General tooling rules
 

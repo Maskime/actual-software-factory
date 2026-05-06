@@ -1,4 +1,4 @@
-.PHONY: test-mcp
+.PHONY: test-mcp test-unit dev-chat build lint
 
 # Run MCP round-trip integration tests.
 # Requires the MCP servers to be started via docker-compose:
@@ -9,4 +9,16 @@ test-mcp:
 	  set -a; \
 	  [ -f infrastructure/.env ] && . infrastructure/.env; \
 	  set +a; \
-	  cd mcp/tests && npm test'
+	  npm run test --workspace=mcp/tests'
+
+dev-chat:
+	npm run dev --workspace=apps/chat
+
+build:
+	npm run build --workspaces --if-present
+
+lint:
+	npm run lint --workspaces --if-present
+
+test-unit:
+	npm run test --workspaces --if-present

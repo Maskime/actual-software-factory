@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { type GitLabClient, GitLabApiError } from "../gitlab-client.js";
+import { type GitLabClient, type ToolResult, GitLabApiError } from "../gitlab-client.js";
 
 interface GitLabMR {
   id: number;
@@ -44,11 +44,11 @@ interface GitLabDiscussion {
   notes: Array<{ id: number; body: string }>;
 }
 
-function projectPath(projectId: string): string {
+export function projectPath(projectId: string): string {
   return `/projects/${encodeURIComponent(projectId)}`;
 }
 
-function errorResponse(err: unknown) {
+export function errorResponse(err: unknown) {
   if (err instanceof GitLabApiError) {
     return {
       content: [
@@ -86,7 +86,7 @@ export const createMrSchema = z.object({
 export async function handleCreateMr(
   client: GitLabClient,
   params: z.infer<typeof createMrSchema>
-) {
+): Promise<ToolResult> {
   try {
     const body: Record<string, unknown> = {
       source_branch: params.source_branch,
@@ -126,7 +126,7 @@ export const getMrSchema = z.object({
 export async function handleGetMr(
   client: GitLabClient,
   params: z.infer<typeof getMrSchema>
-) {
+): Promise<ToolResult> {
   try {
     const basePath = `${projectPath(params.project_id)}/merge_requests/${params.mr_iid}`;
     const [mr, notes] = await Promise.all([
@@ -175,7 +175,7 @@ export const getMrDiffSchema = z.object({
 export async function handleGetMrDiff(
   client: GitLabClient,
   params: z.infer<typeof getMrDiffSchema>
-) {
+): Promise<ToolResult> {
   try {
     const result = await client.get<GitLabChanges>(
       `${projectPath(params.project_id)}/merge_requests/${params.mr_iid}/changes`
@@ -213,7 +213,7 @@ export const addMrCommentSchema = z.object({
 export async function handleAddMrComment(
   client: GitLabClient,
   params: z.infer<typeof addMrCommentSchema>
-) {
+): Promise<ToolResult> {
   try {
     const note = await client.post<GitLabNote>(
       `${projectPath(params.project_id)}/merge_requests/${params.mr_iid}/notes`,
@@ -268,7 +268,7 @@ export const addMrInlineCommentSchema = z.object({
 export async function handleAddMrInlineComment(
   client: GitLabClient,
   params: z.infer<typeof addMrInlineCommentSchema>
-) {
+): Promise<ToolResult> {
   if (params.new_line === undefined && params.old_line === undefined) {
     return {
       content: [
@@ -359,7 +359,7 @@ export const mergeMrSchema = z.object({
 export async function handleMergeMr(
   client: GitLabClient,
   params: z.infer<typeof mergeMrSchema>
-) {
+): Promise<ToolResult> {
   try {
     const body: Record<string, unknown> = {};
     if (params.merge_when_pipeline_succeeds === true) {
