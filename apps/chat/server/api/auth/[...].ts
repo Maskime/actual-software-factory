@@ -17,6 +17,14 @@ export default NuxtAuthHandler({
   pages: {
     signIn: '/login',
   },
+  callbacks: {
+    async jwt({ token, account }) {
+      if (account?.access_token) {
+        token.accessToken = account.access_token as string
+      }
+      return token
+    },
+  },
   providers: [
     GitLabProvider({
       clientId: process.env.NUXT_GITLAB_CLIENT_ID!,

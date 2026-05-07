@@ -15,6 +15,7 @@ export default defineNuxtConfig({
     gitlabClientId: '',
     gitlabClientSecret: '',
     gitlabUrl: 'http://localhost',
+    gitlabInternalUrl: '',
     anthropicApiKey: '',
     anthropicModel: '',
     anthropicSystemPrompt: '',
