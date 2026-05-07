@@ -17,4 +17,20 @@ describe('ChatMessage', () => {
     const w = mount(ChatMessage, { props: { role: 'assistant', content: 'reply' } })
     expect(w.find('div').classes()).toContain('msg-asst-wrap')
   })
+
+  it('renders assistant markdown as HTML', () => {
+    const w = mount(ChatMessage, { props: { role: 'assistant', content: '**bold**' } })
+    expect(w.html()).toContain('<strong>bold</strong>')
+  })
+
+  it('user message stays as plain text (no HTML rendering)', () => {
+    const w = mount(ChatMessage, { props: { role: 'user', content: '**not bold**' } })
+    expect(w.find('.user-text').text()).toContain('**not bold**')
+    expect(w.html()).not.toContain('<strong>')
+  })
+
+  it('strips raw HTML blocks from assistant content', () => {
+    const w = mount(ChatMessage, { props: { role: 'assistant', content: '<script>alert(1)</script>' } })
+    expect(w.html()).not.toContain('<script>')
+  })
 })
