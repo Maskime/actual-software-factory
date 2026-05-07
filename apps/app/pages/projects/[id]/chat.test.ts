@@ -75,7 +75,7 @@ describe('ProjectDashboard — header', () => {
     await flushPromises()
     const dashboardLink = w.find('.hdr-link')
     expect(dashboardLink.exists()).toBe(true)
-    expect(dashboardLink.attributes('href')).toBe('/projects/3/dashboard')
+    expect(dashboardLink.attributes('href')).toBe('/projects/3')
   })
 })
 

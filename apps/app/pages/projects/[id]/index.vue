@@ -62,11 +62,14 @@ function otherLabels(labels: string[]): string[] {
           <span class="brand-name">{{ project?.name ?? 'Actual Software Factory' }}</span>
         </div>
         <div class="hdr-right">
-          <NuxtLink :to="`/projects/${projectId}/chat`" class="hdr-link">Chat</NuxtLink>
           <button class="hdr-signout" @click="signOut({ callbackUrl: '/login' })">Déconnexion</button>
         </div>
       </div>
     </header>
+
+    <div class="toolbar">
+      <NuxtLink :to="`/projects/${projectId}/chat`" class="btn-new">+ Nouveau besoin</NuxtLink>
+    </div>
 
     <main class="main">
       <div v-if="status === 'pending'" class="center">
@@ -183,25 +186,32 @@ function otherLabels(labels: string[]): string[] {
   gap: 0.75rem;
 }
 
-.hdr-link {
+.toolbar {
+  padding: 0.625rem 1.5rem;
+  border-bottom: 1px solid var(--border);
+  background: var(--surface);
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+}
+
+.btn-new {
   font-family: var(--mono);
   font-size: 0.6875rem;
   font-weight: 500;
-  color: var(--txt-2);
-  text-decoration: none;
   letter-spacing: 0.04em;
-  padding: 0.2rem 0.5rem;
-  border: 1px solid var(--border);
+  padding: 0.3rem 0.75rem;
+  background: var(--hi);
+  color: var(--bg);
+  border: 1px solid var(--hi);
   border-radius: 0.25rem;
-  background: transparent;
-  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  text-decoration: none;
   line-height: 1;
+  transition: opacity 0.15s;
 }
 
-.hdr-link:hover {
-  color: var(--hi);
-  border-color: var(--hi);
-  background: color-mix(in srgb, var(--hi) 8%, transparent);
+.btn-new:hover {
+  opacity: 0.85;
 }
 
 .hdr-signout {

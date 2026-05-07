@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref, defineComponent, Suspense, h, computed } from 'vue'
-import Dashboard from './dashboard.vue'
+import Dashboard from './index.vue'
 import type { GitLabIssue } from '../../../../server/api/projects/[id]/issues.get'
 
 vi.stubGlobal('useRoute', () => ({ params: { id: '3' } }))
@@ -58,12 +58,13 @@ describe('Dashboard — header', () => {
     vi.stubGlobal('useRoute', () => ({ params: { id: '3' } }))
   })
 
-  it('shows a link to the chat page', async () => {
+  it('shows a "Nouveau besoin" button linking to the chat page', async () => {
     const w = mountPage()
     await flushPromises()
-    const chatLink = w.find('.hdr-link')
-    expect(chatLink.exists()).toBe(true)
-    expect(chatLink.attributes('href')).toBe('/projects/3/chat')
+    const btn = w.find('.btn-new')
+    expect(btn.exists()).toBe(true)
+    expect(btn.attributes('href')).toBe('/projects/3/chat')
+    expect(btn.text()).toContain('Nouveau besoin')
   })
 })
 

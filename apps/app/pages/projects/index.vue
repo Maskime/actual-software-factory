@@ -31,7 +31,7 @@ const { data: projects, status, error } = await useFetch<GitLabProject[]>('/api/
         <h1 class="page-title">Vos projets</h1>
         <ul class="project-list">
           <li v-for="project in projects" :key="project.id">
-            <NuxtLink :to="`/projects/${project.id}/dashboard`" class="project-card">
+            <NuxtLink :to="`/projects/${project.id}`" class="project-card">
               <span class="project-name">{{ project.name }}</span>
               <span v-if="project.description" class="project-desc">{{ project.description }}</span>
             </NuxtLink>
