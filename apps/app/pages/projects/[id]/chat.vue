@@ -136,8 +136,7 @@ async function sendMessage(text: string) {
 }
 
 .hdr-inner {
-  max-width: 56rem;
-  margin: 0 auto;
+  max-width: 100%;
   padding: 0 1.5rem;
   height: 3rem;
   display: flex;
