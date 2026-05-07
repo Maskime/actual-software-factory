@@ -1,5 +1,6 @@
 import { defineEventHandler, readBody, setResponseHeader, sendStream, createError } from 'h3'
 import Anthropic from '@anthropic-ai/sdk'
+import { getToken } from '#auth'
 import { QUALIFICATION_PROMPT } from '../prompts/qualification'
 
 interface ChatMessage {
@@ -8,9 +9,65 @@ interface ChatMessage {
 }
 
 const DEFAULT_MODEL = 'claude-sonnet-4-6'
+const MAX_FILE_CHARS = 50_000
+const GITLAB_FETCH_TIMEOUT_MS = 3_000
+
+async function fetchGitLabFileRaw(
+  baseUrl: string,
+  token: string,
+  projectId: number,
+  filename: string,
+): Promise<string | null> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), GITLAB_FETCH_TIMEOUT_MS)
+  try {
+    const url = `${baseUrl}/api/v4/projects/${projectId}/repository/files/${encodeURIComponent(filename)}/raw?ref=HEAD`
+    const res = await fetch(url, {
+      headers: { Authorization: `Bearer ${token}` },
+      signal: controller.signal,
+    })
+    if (!res.ok) return null
+    const text = await res.text()
+    return text.length > MAX_FILE_CHARS ? text.slice(0, MAX_FILE_CHARS) : text
+  } catch {
+    // network error, timeout, or 4xx — degrade silently
+    return null
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+async function buildProjectContext(
+  event: Parameters<typeof getToken>[0]['event'],
+  projectId: number,
+  config: ReturnType<typeof useRuntimeConfig>,
+): Promise<string | null> {
+  // The user's OAuth token is the authorization gate: GitLab returns 403 for inaccessible projects.
+  const tokenData = await getToken({ event })
+  if (!tokenData?.accessToken) return null
+
+  const baseUrl = (config.gitlabInternalUrl as string) || (config.gitlabUrl as string)
+  const accessToken = tokenData.accessToken as string
+
+  const [readme, claudeMd] = await Promise.all([
+    fetchGitLabFileRaw(baseUrl, accessToken, projectId, 'README.md'),
+    fetchGitLabFileRaw(baseUrl, accessToken, projectId, 'CLAUDE.md'),
+  ])
+
+  if (!readme && !claudeMd) return null
+
+  const parts: string[] = ['## Contexte du projet']
+  if (readme) {
+    parts.push('### README.md', readme)
+  }
+  if (claudeMd) {
+    parts.push('### CLAUDE.md', claudeMd)
+  }
+  return parts.join('\n\n')
+}
 
 export default defineEventHandler(async (event) => {
-  const body = await readBody<{ messages?: ChatMessage[] }>(event)
+  const body = await readBody<{ messages?: ChatMessage[]; projectId?: number }>(event)
   const config = useRuntimeConfig(event)
 
   if (!Array.isArray(body?.messages) || body.messages.length === 0) {
@@ -23,6 +80,21 @@ export default defineEventHandler(async (event) => {
 
   const model = (config.anthropicModel as string) || DEFAULT_MODEL
   const systemPrompt = (config.anthropicSystemPrompt as string) || QUALIFICATION_PROMPT
+
+  const systemBlocks: Anthropic.TextBlockParam[] = [
+    {
+      type: 'text',
+      text: systemPrompt,
+      cache_control: { type: 'ephemeral' },
+    },
+  ]
+
+  if (body.projectId) {
+    const projectContext = await buildProjectContext(event, body.projectId, config)
+    if (projectContext) {
+      systemBlocks.push({ type: 'text', text: projectContext })
+    }
+  }
 
   setResponseHeader(event, 'Content-Type', 'text/event-stream; charset=utf-8')
   setResponseHeader(event, 'Cache-Control', 'no-cache')
@@ -37,13 +109,7 @@ export default defineEventHandler(async (event) => {
         const anthropicStream = client.messages.stream({
           model,
           max_tokens: 4096,
-          system: [
-            {
-              type: 'text',
-              text: systemPrompt,
-              cache_control: { type: 'ephemeral' },
-            },
-          ],
+          system: systemBlocks,
           messages: body.messages!,
         })
 
