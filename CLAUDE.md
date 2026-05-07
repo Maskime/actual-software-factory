@@ -29,6 +29,32 @@ All frontend/UI work must use Vue.js (Vue 3 Composition API) as the base framewo
 
 Every MCP server must be deployed as its own Docker container in `infrastructure/docker-compose.yml` and joined to `factory-network`. All MCP communication uses the HTTP transport (Streamable HTTP) — never stdio. Agents connect to MCP servers via HTTP URL (e.g. `http://mcp-gitlab:3000/mcp`). Do not use `StdioServerTransport` anywhere in the codebase.
 
+## Commands
+
+```bash
+# Dev
+npm run dev:chat                          # Nuxt dev server on :3000
+
+# Build / lint / typecheck (all workspaces)
+npm run build
+npm run lint
+npm run typecheck                         # nuxi prepare + lint + tsc across all workspaces
+
+# Unit tests (vitest — mcp/gitlab + apps/chat)
+npm run test                              # run once
+npm run test:coverage                     # with lcov coverage reports
+
+# Single workspace
+npm run test -w @factory/mcp-gitlab
+npm run test:coverage -w @factory/chat
+
+# MCP round-trip integration tests (requires live Docker services)
+make test-mcp
+# Prerequisite: docker compose -f infrastructure/docker-compose.yml up -d mcp-gitlab mcp-sonarqube mcp-temporal
+```
+
+> `mcp/tests` is **not** vitest — it is a custom CLI runner (`tsx src/index.ts`). It is intentionally excluded from `vitest.workspace.ts` and runs only via `make test-mcp`.
+
 ## Dependency management
 
 When adding a new dependency to any package in this project:
@@ -42,6 +68,20 @@ When adding a new dependency to any package in this project:
 **GitLab project:** When using the GitLab MCP server from this repository, the target project is **"Software Factory"**, ID `3`.
 
 **Do not use the `gh` CLI.** To fetch information about GitHub repositories (README, releases, file content, API data), use HTTP directly — e.g. `curl https://api.github.com/...` or `fetch()` in TypeScript. The `gh` command is not guaranteed to be installed or authenticated in this environment.
+
+## Key architecture patterns
+
+**MCP servers are stateless per-request.** Each `POST /mcp` creates a fresh `McpServer` + `StreamableHTTPServerTransport` instance and tears it down on `res.close`. There is no shared mutable state across requests. Local dev ports: gitlab=3001, sonarqube=3002, temporal=3003.
+
+**Nuxt 4 compat mode.** `apps/chat` sets `future.compatibilityVersion: 4` in `nuxt.config.ts`. This changes directory conventions: app code lives under `app/` (pages, components, utils, middleware), server code under `server/` (api, prompts, middleware). Do not place app-layer files at the Nuxt 3 root level.
+
+**OAuth dual-URL pattern.** The chat app uses two separate GitLab URLs for OAuth:
+- `NUXT_GITLAB_URL` — public URL for browser redirects (authorization endpoint)
+- `NUXT_GITLAB_INTERNAL_URL` — internal Docker hostname for server-to-server calls (token exchange, userinfo)
+
+Without `NUXT_GITLAB_INTERNAL_URL`, token exchange fails inside Docker because `localhost` from the Nitro server does not reach GitLab.
+
+**Chat API streaming.** `server/api/chat.post.ts` uses the Anthropic streaming API (`client.messages.stream`) and forwards chunks as SSE (`text/event-stream`). The qualification system prompt is injected with `cache_control: { type: 'ephemeral' }` for prompt caching.
 
 ## Infrastructure
 

@@ -1,7 +1,10 @@
 {
   "name": "@factory/root",
   "private": true,
-  "workspaces": ["mcp/*", "apps/*"],
+  "workspaces": [
+    "mcp/*",
+    "apps/*"
+  ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
@@ -16,5 +19,8 @@
     "tsx": "^4.19.2",
     "typescript": "^5.8.0",
     "vitest": "^2.0.0"
+  },
+  "optionalDependencies": {
+    "next-auth": "^4.21.1"
   }
 }
