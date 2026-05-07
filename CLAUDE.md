@@ -15,7 +15,7 @@ Software Factory is an automated development pipeline where AI agents handle the
 | Workflow orchestration | Temporal | On-prem (Docker) |
 | LLM | Claude (Anthropic API) | Cloud |
 | Agent ↔ tool communication | MCP servers | On-prem |
-| Requirements qualification UI | Nuxt 4 + Tailwind CSS | Local / Docker (`apps/chat/`) |
+| Requirements qualification UI | Nuxt 4 + Tailwind CSS | Local / Docker (`apps/`) |
 
 **Application language: TypeScript (strict mode)**
 
@@ -33,20 +33,20 @@ Every MCP server must be deployed as its own Docker container in `infrastructure
 
 ```bash
 # Dev
-npm run dev:chat                          # Nuxt dev server on :3000
+npm run dev                               # Nuxt dev server on :3000
 
 # Build / lint / typecheck (all workspaces)
 npm run build
 npm run lint
 npm run typecheck                         # nuxi prepare + lint + tsc across all workspaces
 
-# Unit tests (vitest — mcp/gitlab + apps/chat)
+# Unit tests (vitest — mcp/gitlab + apps)
 npm run test                              # run once
 npm run test:coverage                     # with lcov coverage reports
 
 # Single workspace
 npm run test -w @factory/mcp-gitlab
-npm run test:coverage -w @factory/chat
+npm run test:coverage -w @factory/portal
 
 # MCP round-trip integration tests (requires live Docker services)
 make test-mcp
@@ -73,7 +73,7 @@ When adding a new dependency to any package in this project:
 
 **MCP servers are stateless per-request.** Each `POST /mcp` creates a fresh `McpServer` + `StreamableHTTPServerTransport` instance and tears it down on `res.close`. There is no shared mutable state across requests. Local dev ports: gitlab=3001, sonarqube=3002, temporal=3003.
 
-**Nuxt 4 compat mode.** `apps/chat` sets `future.compatibilityVersion: 4` in `nuxt.config.ts`. This changes directory conventions: app code lives under `app/` (pages, components, utils, middleware), server code under `server/` (api, prompts, middleware). Do not place app-layer files at the Nuxt 3 root level.
+**Nuxt 4 compat mode.** `apps` sets `future.compatibilityVersion: 4` in `nuxt.config.ts`. This changes directory conventions: app code lives under `app/` (pages, components, utils, middleware), server code under `server/` (api, prompts, middleware). Do not place app-layer files at the Nuxt 3 root level.
 
 **OAuth dual-URL pattern.** The chat app uses two separate GitLab URLs for OAuth:
 - `NUXT_GITLAB_URL` — public URL for browser redirects (authorization endpoint)

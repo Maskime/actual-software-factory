@@ -64,12 +64,12 @@ describe('ProjectsIndex — project list', () => {
     expect(cards[1]?.find('.project-desc').exists()).toBe(false)
   })
 
-  it('links each card to /projects/[id]/dashboard', async () => {
+  it('links each card to /projects/[id]', async () => {
     const w = mountPage()
     await flushPromises()
     const links = w.findAll('.project-card')
-    expect(links[0]?.attributes('href')).toBe('/projects/3/dashboard')
-    expect(links[1]?.attributes('href')).toBe('/projects/5/dashboard')
+    expect(links[0]?.attributes('href')).toBe('/projects/3')
+    expect(links[1]?.attributes('href')).toBe('/projects/5')
   })
 
   it('does not show spinner when loaded', async () => {

@@ -25,13 +25,13 @@ test:
   script:
     - npm ci
     - npm run test:coverage -w @factory/mcp-gitlab
-    - npx nuxi prepare --cwd apps/chat
-    - npm run test:coverage -w @factory/chat
+    - npx nuxi prepare --cwd apps
+    - npm run test:coverage -w @factory/portal
   artifacts:
     when: always
     paths:
       - mcp/gitlab/coverage/
-      - apps/chat/coverage/
+      - apps/coverage/
     expire_in: 1 day
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
