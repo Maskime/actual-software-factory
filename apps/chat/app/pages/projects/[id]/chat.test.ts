@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
 import { ref, defineComponent, Suspense, h, computed } from 'vue'
-import ProjectDashboard from './[id].vue'
+import ProjectDashboard from './chat.vue'
 
 vi.stubGlobal('useRoute', () => ({ params: { id: '3' } }))
 vi.stubGlobal('useAuth', () => ({ signOut: vi.fn() }))
@@ -68,6 +68,14 @@ describe('ProjectDashboard — header', () => {
     await flushPromises()
     expect(w.find('.brand-name').text()).toBe('Actual Software Factory')
     vi.stubGlobal('useRoute', () => ({ params: { id: '3' } }))
+  })
+
+  it('shows a link to the dashboard', async () => {
+    const w = mountPage()
+    await flushPromises()
+    const dashboardLink = w.find('.hdr-link')
+    expect(dashboardLink.exists()).toBe(true)
+    expect(dashboardLink.attributes('href')).toBe('/projects/3/dashboard')
   })
 })
 
