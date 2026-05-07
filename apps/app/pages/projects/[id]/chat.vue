@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, nextTick } from 'vue'
+import { ref, computed, nextTick } from 'vue'
 import type { GitLabProject } from '../../../../server/api/projects.get'
 import ChatThread from '../../../components/ChatThread.vue'
 import ChatInput from '../../../components/ChatInput.vue'
@@ -9,6 +9,8 @@ interface Message {
   role: 'user' | 'assistant'
   content: string
 }
+
+type SubmissionStatus = 'idle' | 'submitting' | 'done' | 'error'
 
 const route = useRoute()
 const projectId = Number(route.params.id)
@@ -21,6 +23,25 @@ const messages = ref<Message[]>([])
 const isStreaming = ref(false)
 const error = ref<string | null>(null)
 const threadRef = ref<HTMLElement | null>(null)
+
+const submissionStatus = ref<SubmissionStatus>('idle')
+const epicUrl = ref<string | null>(null)
+const submissionError = ref<string | null>(null)
+
+const reformulationContent = computed(() => {
+  const msg = [...messages.value].reverse().find(
+    m => m.role === 'assistant' && m.content.includes('## Reformulation du besoin'),
+  )
+  if (!msg) return null
+  const match = msg.content.match(/---\s+(## Reformulation du besoin[\s\S]*?)\s+---/)
+  return match?.[1]?.trim() ?? null
+})
+
+const isReadyToSubmit = computed(() => {
+  if (!reformulationContent.value || isStreaming.value || submissionStatus.value !== 'idle') return false
+  const lastAssistant = [...messages.value].reverse().find(m => m.role === 'assistant')
+  return !!lastAssistant && !lastAssistant.content.includes('Cette reformulation est-elle correcte')
+})
 
 async function processLines(lines: string[], assistantMsg: Message): Promise<boolean> {
   for (const line of lines) {
@@ -79,6 +100,28 @@ async function sendMessage(text: string) {
     isStreaming.value = false
   }
 }
+
+async function submitNeed() {
+  if (!reformulationContent.value) return
+  submissionStatus.value = 'submitting'
+  submissionError.value = null
+  try {
+    const titleMatch = reformulationContent.value.match(/\*\*Objectif(?:\s+\w+)?\*\*\s*:\s*([^\n]+)/)
+    const title = (titleMatch?.[1]?.trim() ?? 'Besoin qualifié').slice(0, 255)
+    const res = await fetch(`/api/projects/${projectId}/submit`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title, description: reformulationContent.value }),
+    })
+    if (!res.ok) throw new Error(`Erreur serveur : ${res.status}`)
+    const data = await res.json()
+    epicUrl.value = data.url
+    submissionStatus.value = 'done'
+  } catch (e) {
+    submissionError.value = e instanceof Error ? e.message : 'Erreur de connexion'
+    submissionStatus.value = 'error'
+  }
+}
 </script>
 
 <template>
@@ -115,7 +158,31 @@ async function sendMessage(text: string) {
       <span class="err-tag">erreur</span>{{ error }}
     </div>
 
-    <ChatInput :disabled="isStreaming" @send="sendMessage" />
+    <div v-if="isReadyToSubmit || submissionStatus === 'submitting'" class="submit-bar">
+      <span class="submit-label">Votre besoin est qualifié et prêt à être soumis.</span>
+      <button
+        class="submit-btn"
+        :disabled="submissionStatus === 'submitting'"
+        @click="submitNeed"
+      >
+        <span v-if="submissionStatus === 'submitting'" class="submit-spinner" aria-hidden="true" />
+        {{ submissionStatus === 'submitting' ? 'Soumission en cours…' : 'Soumettre le besoin' }}
+      </button>
+    </div>
+
+    <div v-if="submissionStatus === 'done'" class="submit-success">
+      <span class="submit-ok-tag">soumis</span>
+      <span class="submit-ok-text">Besoin soumis avec succès —</span>
+      <a :href="epicUrl ?? ''" target="_blank" rel="noopener" class="submit-link">Voir l'issue GitLab</a>
+    </div>
+
+    <div v-if="submissionStatus === 'error'" class="submit-err-bar">
+      <span class="err-tag">erreur</span>
+      <span>{{ submissionError }}</span>
+      <button class="retry-btn" @click="submitNeed">Réessayer</button>
+    </div>
+
+    <ChatInput :disabled="isStreaming || submissionStatus === 'done'" @send="sendMessage" />
   </div>
 </template>
 
@@ -311,5 +378,143 @@ async function sendMessage(text: string) {
   padding: 0.1rem 0.35rem;
   border-radius: 2px;
   flex-shrink: 0;
+}
+
+/* Submit zone */
+
+.submit-bar {
+  flex-shrink: 0;
+  margin: 0.375rem 1.5rem;
+  padding: 0.625rem 0.875rem;
+  border: 1px solid rgba(39, 174, 96, 0.3);
+  border-radius: 3px;
+  background: rgba(39, 174, 96, 0.05);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.submit-label {
+  font-family: var(--mono);
+  font-size: 0.7rem;
+  color: var(--txt-2);
+  letter-spacing: 0.02em;
+}
+
+.submit-btn {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.3rem 0.75rem;
+  border: 1px solid rgba(39, 174, 96, 0.5);
+  border-radius: 3px;
+  background: rgba(39, 174, 96, 0.1);
+  color: #27ae60;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.submit-btn:hover:not(:disabled) {
+  background: rgba(39, 174, 96, 0.18);
+  border-color: rgba(39, 174, 96, 0.7);
+}
+
+.submit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.submit-spinner {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  border: 1.5px solid rgba(39, 174, 96, 0.3);
+  border-top-color: #27ae60;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.submit-success {
+  flex-shrink: 0;
+  margin: 0.375rem 1.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(39, 174, 96, 0.25);
+  border-radius: 3px;
+  background: rgba(39, 174, 96, 0.05);
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.submit-ok-tag {
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid rgba(39, 174, 96, 0.4);
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+  color: #27ae60;
+  flex-shrink: 0;
+}
+
+.submit-ok-text {
+  color: var(--txt-2);
+}
+
+.submit-link {
+  color: var(--hi);
+  text-decoration: none;
+  border-bottom: 1px solid transparent;
+  transition: border-color 0.15s;
+}
+
+.submit-link:hover {
+  border-bottom-color: var(--hi);
+}
+
+.submit-err-bar {
+  flex-shrink: 0;
+  margin: 0.375rem 1.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid rgba(192, 57, 43, 0.25);
+  border-radius: 3px;
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--err);
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  background: rgba(192, 57, 43, 0.06);
+}
+
+.retry-btn {
+  margin-left: auto;
+  flex-shrink: 0;
+  padding: 0.15rem 0.5rem;
+  border: 1px solid rgba(192, 57, 43, 0.4);
+  border-radius: 2px;
+  background: transparent;
+  color: var(--err);
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.06em;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.retry-btn:hover {
+  background: rgba(192, 57, 43, 0.08);
 }
 </style>
