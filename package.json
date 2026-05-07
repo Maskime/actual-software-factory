@@ -3,15 +3,15 @@
   "private": true,
   "workspaces": [
     "mcp/*",
-    "apps/*"
+    "apps"
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "typecheck": "npx nuxi prepare --cwd apps/chat && npm run lint --workspaces --if-present && npm run typecheck -w @factory/chat",
+    "typecheck": "npx nuxi prepare --cwd apps && npm run lint --workspaces --if-present && npm run typecheck -w @factory/portal",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "dev:chat": "npm run dev --workspace=apps/chat"
+    "dev": "npm run dev --workspace=apps"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

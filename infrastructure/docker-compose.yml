@@ -297,12 +297,12 @@ services:
   # ---------------------------------------------------------------------------
   chat:
     build:
-      context: ../apps/chat
+      context: ../apps
       dockerfile: Dockerfile
     container_name: chat
     restart: unless-stopped
     env_file:
-      - ../apps/chat/.env
+      - ../apps/.env
     environment:
       NUXT_PORT: "3000"
       NUXT_GITLAB_INTERNAL_URL: "http://gitlab"

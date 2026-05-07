@@ -11,8 +11,8 @@ test-mcp:
 	  set +a; \
 	  npm run test --workspace=mcp/tests'
 
-dev-chat:
-	npm run dev --workspace=apps/chat
+dev:
+	npm run dev --workspace=apps
 
 build:
 	npm run build --workspaces --if-present

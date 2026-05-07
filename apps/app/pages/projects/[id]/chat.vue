@@ -95,7 +95,7 @@ async function sendMessage(text: string) {
             <span class="hdr-status-dot" />
             <span class="hdr-status-lbl">processing</span>
           </div>
-          <NuxtLink :to="`/projects/${projectId}/dashboard`" class="hdr-link">Dashboard</NuxtLink>
+          <NuxtLink :to="`/projects/${projectId}`" class="hdr-link">Dashboard</NuxtLink>
           <button class="hdr-signout" @click="signOut({ callbackUrl: '/login' })">Déconnexion</button>
         </div>
       </div>
