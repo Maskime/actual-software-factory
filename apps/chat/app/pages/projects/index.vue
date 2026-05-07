@@ -1,7 +1,5 @@
 <script setup lang="ts">
-import type { GitLabProject } from '../../server/api/projects.get'
-
-definePageMeta({ middleware: 'home-redirect' })
+import type { GitLabProject } from '../../../server/api/projects.get'
 
 const { signOut } = useAuth()
 const { data: projects, status, error } = await useFetch<GitLabProject[]>('/api/projects')
@@ -19,21 +17,28 @@ const { data: projects, status, error } = await useFetch<GitLabProject[]>('/api/
       </div>
     </header>
 
-    <div class="body">
-      <div v-if="status === 'pending'" class="state">
+    <main class="main">
+      <div v-if="status === 'pending'" class="center">
         <span class="spinner" aria-label="Chargement…" />
       </div>
 
-      <div v-else-if="error" class="state err-state">
+      <div v-else-if="error" class="center err-state">
         <span class="err-tag">erreur</span>
         <span>Impossible de récupérer vos projets.</span>
       </div>
 
-      <div v-else-if="!projects || projects.length === 0" class="state">
-        <p class="msg">Aucun projet accessible.</p>
-        <p class="sub">Demandez à un administrateur GitLab de vous ajouter à un projet.</p>
-      </div>
-    </div>
+      <template v-else>
+        <h1 class="page-title">Vos projets</h1>
+        <ul class="project-list">
+          <li v-for="project in projects" :key="project.id">
+            <NuxtLink :to="`/projects/${project.id}`" class="project-card">
+              <span class="project-name">{{ project.name }}</span>
+              <span v-if="project.description" class="project-desc">{{ project.description }}</span>
+            </NuxtLink>
+          </li>
+        </ul>
+      </template>
+    </main>
   </div>
 </template>
 
@@ -102,19 +107,70 @@ const { data: projects, status, error } = await useFetch<GitLabProject[]>('/api/
   color: var(--hi);
 }
 
-.body {
+.main {
   flex: 1;
+  overflow-y: auto;
+  padding: 2rem 1.5rem;
+  max-width: 56rem;
+  width: 100%;
+  margin: 0 auto;
+}
+
+.center {
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 0.625rem;
+  padding: 4rem 0;
 }
 
-.state {
+.page-title {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 500;
+  letter-spacing: 0.06em;
+  color: var(--txt-2);
+  text-transform: uppercase;
+  margin: 0 0 1.25rem;
+}
+
+.project-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  align-items: center;
   gap: 0.5rem;
-  text-align: center;
+}
+
+.project-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  text-decoration: none;
+  transition: border-color 0.15s;
+}
+
+.project-card:hover {
+  border-color: var(--hi);
+}
+
+.project-name {
+  font-family: var(--mono);
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--hi);
+}
+
+.project-desc {
+  font-size: 0.8125rem;
+  font-weight: 300;
+  color: var(--txt-2);
+  line-height: 1.4;
 }
 
 .spinner {
@@ -131,23 +187,7 @@ const { data: projects, status, error } = await useFetch<GitLabProject[]>('/api/
   to { transform: rotate(360deg); }
 }
 
-.msg {
-  margin: 0;
-  font-size: 0.875rem;
-  font-weight: 500;
-  color: var(--txt);
-}
-
-.sub {
-  margin: 0;
-  font-size: 0.75rem;
-  font-weight: 300;
-  color: var(--txt-3);
-}
-
 .err-state {
-  flex-direction: row;
-  gap: 0.625rem;
   font-family: var(--mono);
   font-size: 0.75rem;
   color: var(--err);

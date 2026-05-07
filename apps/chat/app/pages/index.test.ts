@@ -1,106 +1,72 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
-import { ref } from 'vue'
+import { ref, defineComponent, Suspense, h } from 'vue'
 import IndexPage from './index.vue'
 
-vi.stubGlobal('useAuth', () => ({
-  data: ref(null),
-  signOut: vi.fn(),
-}))
+vi.hoisted(() => {
+  vi.stubGlobal('definePageMeta', vi.fn())
+})
 
-function mockFetchOk(lines: string[]) {
-  const encoder = new TextEncoder()
-  const data = lines.join('\n') + '\n'
-  let done = false
-  const reader = {
-    read: vi.fn().mockImplementation(() => {
-      if (!done) {
-        done = true
-        return Promise.resolve({ done: false, value: encoder.encode(data) })
-      }
-      return Promise.resolve({ done: true, value: undefined as unknown as Uint8Array })
-    }),
-  }
-  vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
-    ok: true,
-    body: { getReader: () => reader },
+const mockSignOut = vi.fn()
+vi.stubGlobal('useAuth', () => ({ signOut: mockSignOut }))
+
+function stubFetch(data: unknown, status: string, error: unknown = null) {
+  vi.stubGlobal('useFetch', vi.fn().mockResolvedValue({
+    data: ref(data),
+    status: ref(status),
+    error: ref(error),
   }))
-  return reader
 }
 
-async function sendMessage(w: ReturnType<typeof mount>, text = 'mon besoin') {
-  await w.find('textarea').setValue(text)
-  await w.find('button[aria-label="Envoyer"]').trigger('click')
-  await flushPromises()
+function mountPage() {
+  return mount(defineComponent({
+    render: () => h(Suspense, null, { default: () => h(IndexPage) }),
+  }))
 }
 
-describe('IndexPage — empty state', () => {
-  it('shows placeholder before any message', () => {
-    const w = mount(IndexPage)
-    expect(w.text()).toContain('Décrivez votre besoin')
+describe('IndexPage — loading state', () => {
+  it('shows spinner while pending', async () => {
+    stubFetch(null, 'pending')
+    const w = mountPage()
+    await flushPromises()
+    expect(w.find('.spinner').exists()).toBe(true)
   })
 })
 
-describe('IndexPage — sendMessage()', () => {
-  beforeEach(() => { vi.restoreAllMocks() })
-
-  it('replaces placeholder with thread after first send', async () => {
-    mockFetchOk(['data: hello ', 'data: [DONE]'])
-    const w = mount(IndexPage)
-
-    await sendMessage(w)
-
-    expect(w.text()).not.toContain('Décrivez votre besoin')
+describe('IndexPage — no projects', () => {
+  it('shows "Aucun projet accessible" when result is empty', async () => {
+    stubFetch([], 'success')
+    const w = mountPage()
+    await flushPromises()
+    expect(w.text()).toContain('Aucun projet accessible')
   })
 
-  it('appends streamed words to assistant message', async () => {
-    mockFetchOk(['data: bonjour ', 'data: monde ', 'data: [DONE]'])
-    const w = mount(IndexPage)
-
-    await sendMessage(w, 'test')
-
-    expect(w.text()).toContain('bonjour')
-    expect(w.text()).toContain('monde')
+  it('does not show spinner when loaded', async () => {
+    stubFetch([], 'success')
+    const w = mountPage()
+    await flushPromises()
+    expect(w.find('.spinner').exists()).toBe(false)
   })
+})
 
-  it('stops streaming on [DONE] mid-chunk', async () => {
-    mockFetchOk(['data: avant ', 'data: [DONE]', 'data: apres '])
-    const w = mount(IndexPage)
-
-    await sendMessage(w, 'test')
-
-    expect(w.text()).toContain('avant')
-    expect(w.text()).not.toContain('apres')
+describe('IndexPage — error state', () => {
+  it('shows error state when fetch fails', async () => {
+    stubFetch(null, 'error', new Error('Network error'))
+    const w = mountPage()
+    await flushPromises()
+    expect(w.find('.err-state').exists()).toBe(true)
+    expect(w.text()).toContain('Impossible de récupérer')
   })
+})
 
-  it('shows error banner on HTTP error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 503 }))
-    const w = mount(IndexPage)
+describe('IndexPage — sign-out', () => {
+  beforeEach(() => mockSignOut.mockReset())
 
-    await sendMessage(w)
-
-    expect(w.find('.err-bar').exists()).toBe(true)
-    expect(w.text()).toContain('503')
-  })
-
-  it('shows error banner on network failure', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Network error')))
-    const w = mount(IndexPage)
-
-    await sendMessage(w)
-
-    expect(w.find('.err-bar').exists()).toBe(true)
-    expect(w.text()).toContain('Network error')
-  })
-
-  it('removes empty assistant message on early error', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('fail')))
-    const w = mount(IndexPage)
-
-    await sendMessage(w, 'test')
-
-    // user message remains but empty assistant is spliced out
-    expect(w.text()).toContain('test')
-    expect(w.find('.err-bar').exists()).toBe(true)
+  it('calls signOut with /login callbackUrl on click', async () => {
+    stubFetch([], 'success')
+    const w = mountPage()
+    await flushPromises()
+    await w.find('button').trigger('click')
+    expect(mockSignOut).toHaveBeenCalledWith({ callbackUrl: '/login' })
   })
 })
