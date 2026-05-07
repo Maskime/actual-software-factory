@@ -37,9 +37,14 @@ vi.mock('@anthropic-ai/sdk', () => {
   return { default: Anthropic }
 })
 
+vi.mock('#auth', () => ({
+  getToken: vi.fn().mockResolvedValue(null),
+}))
+
 import handler from './chat.post'
 import * as h3 from 'h3'
 import Anthropic from '@anthropic-ai/sdk'
+import * as auth from '#auth'
 import { QUALIFICATION_PROMPT } from '../prompts/qualification'
 
 describe('QUALIFICATION_PROMPT content', () => {
@@ -60,14 +65,31 @@ const mockConfig = {
   anthropicApiKey: 'test-api-key',
   anthropicModel: 'claude-sonnet-4-6',
   anthropicSystemPrompt: 'Test system prompt',
+  gitlabUrl: 'http://gitlab.test',
+  gitlabInternalUrl: '',
 }
 
 const mockEvent = {}
+
+function drainStream(stream: ReadableStream): Promise<string[]> {
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  const chunks: string[] = []
+  async function drain() {
+    while (true) {
+      const { done, value } = await reader.read()
+      if (done) break
+      chunks.push(decoder.decode(value))
+    }
+  }
+  return drain().then(() => chunks)
+}
 
 describe('chat.post handler', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.stubGlobal('useRuntimeConfig', vi.fn().mockReturnValue(mockConfig))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
   })
 
   afterEach(() => {
@@ -79,16 +101,7 @@ describe('chat.post handler', () => {
 
     const chunks: string[] = []
     vi.mocked(h3.sendStream).mockImplementation((_ev, stream: ReadableStream) => {
-      const reader = stream.getReader()
-      const decoder = new TextDecoder()
-      async function drain() {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          chunks.push(decoder.decode(value))
-        }
-      }
-      return drain() as unknown as ReturnType<typeof h3.sendStream>
+      return drainStream(stream).then(c => { chunks.push(...c) }) as unknown as ReturnType<typeof h3.sendStream>
     })
 
     await (handler as Function)(mockEvent)
@@ -103,16 +116,7 @@ describe('chat.post handler', () => {
 
     const chunks: string[] = []
     vi.mocked(h3.sendStream).mockImplementation((_ev, stream: ReadableStream) => {
-      const reader = stream.getReader()
-      const decoder = new TextDecoder()
-      async function drain() {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          chunks.push(decoder.decode(value))
-        }
-      }
-      return drain() as unknown as ReturnType<typeof h3.sendStream>
+      return drainStream(stream).then(c => { chunks.push(...c) }) as unknown as ReturnType<typeof h3.sendStream>
     })
 
     await (handler as Function)(mockEvent)
@@ -186,16 +190,7 @@ describe('chat.post handler', () => {
 
     const chunks: string[] = []
     vi.mocked(h3.sendStream).mockImplementation((_ev, stream: ReadableStream) => {
-      const reader = stream.getReader()
-      const decoder = new TextDecoder()
-      async function drain() {
-        while (true) {
-          const { done, value } = await reader.read()
-          if (done) break
-          chunks.push(decoder.decode(value))
-        }
-      }
-      return drain() as unknown as ReturnType<typeof h3.sendStream>
+      return drainStream(stream).then(c => { chunks.push(...c) }) as unknown as ReturnType<typeof h3.sendStream>
     })
 
     await (handler as Function)(mockEvent)
@@ -203,5 +198,108 @@ describe('chat.post handler', () => {
     const errorChunk = chunks.find(c => c.includes('[ERROR]'))
     expect(errorChunk).toBeDefined()
     expect(errorChunk).toContain('rate limit exceeded')
+  })
+})
+
+describe('chat.post — project context injection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('useRuntimeConfig', vi.fn().mockReturnValue(mockConfig))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('injects README.md content as a second system block when projectId is provided', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'token-xyz' } as any)
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (url.includes('README.md')) return Promise.resolve({ ok: true, text: () => Promise.resolve('# My Project') })
+      return Promise.resolve({ ok: false, status: 404 })
+    }))
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'hi' }], projectId: 3 })
+
+    const MockAnthropic = Anthropic as unknown as ReturnType<typeof vi.fn>
+    const streamSpy = vi.fn().mockReturnValue({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }
+      },
+    })
+    MockAnthropic.mockImplementation(() => ({ messages: { stream: streamSpy } }))
+    vi.mocked(h3.sendStream).mockResolvedValue(undefined)
+
+    await (handler as Function)(mockEvent)
+
+    const callArg = streamSpy.mock.calls[0][0]
+    expect(callArg.system).toHaveLength(2)
+    expect(callArg.system[1].text).toContain('# My Project')
+    expect(callArg.system[1].text).toContain('Contexte du projet')
+  })
+
+  it('uses only one system block when GitLab returns 404 for all files', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'token-xyz' } as any)
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'hi' }], projectId: 3 })
+
+    const MockAnthropic = Anthropic as unknown as ReturnType<typeof vi.fn>
+    const streamSpy = vi.fn().mockReturnValue({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }
+      },
+    })
+    MockAnthropic.mockImplementation(() => ({ messages: { stream: streamSpy } }))
+    vi.mocked(h3.sendStream).mockResolvedValue(undefined)
+
+    await (handler as Function)(mockEvent)
+
+    const callArg = streamSpy.mock.calls[0][0]
+    expect(callArg.system).toHaveLength(1)
+  })
+
+  it('uses only one system block when getToken returns null', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue(null)
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'hi' }], projectId: 3 })
+
+    const MockAnthropic = Anthropic as unknown as ReturnType<typeof vi.fn>
+    const streamSpy = vi.fn().mockReturnValue({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }
+      },
+    })
+    MockAnthropic.mockImplementation(() => ({ messages: { stream: streamSpy } }))
+    vi.mocked(h3.sendStream).mockResolvedValue(undefined)
+
+    await (handler as Function)(mockEvent)
+
+    const callArg = streamSpy.mock.calls[0][0]
+    expect(callArg.system).toHaveLength(1)
+  })
+
+  it('truncates README.md content to 50 000 characters', async () => {
+    const longContent = 'x'.repeat(60_000)
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'token-xyz' } as any)
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((url: string) => {
+      if (url.includes('README.md')) return Promise.resolve({ ok: true, text: () => Promise.resolve(longContent) })
+      return Promise.resolve({ ok: false, status: 404 })
+    }))
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'hi' }], projectId: 3 })
+
+    const MockAnthropic = Anthropic as unknown as ReturnType<typeof vi.fn>
+    const streamSpy = vi.fn().mockReturnValue({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }
+      },
+    })
+    MockAnthropic.mockImplementation(() => ({ messages: { stream: streamSpy } }))
+    vi.mocked(h3.sendStream).mockResolvedValue(undefined)
+
+    await (handler as Function)(mockEvent)
+
+    const callArg = streamSpy.mock.calls[0][0]
+    expect(callArg.system).toHaveLength(2)
+    // The README content in the block should be at most 50 000 chars
+    const readmeContent = callArg.system[1].text as string
+    expect(readmeContent).not.toContain('x'.repeat(50_001))
+    expect(readmeContent.length).toBeLessThanOrEqual(50_000 + 200) // +200 for context header/labels
   })
 })
