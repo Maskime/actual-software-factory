@@ -1,9 +1,9 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
-import type { GitLabProject } from '../../../server/api/projects.get'
-import ChatThread from '../../components/ChatThread.vue'
-import ChatInput from '../../components/ChatInput.vue'
-import { parseSSELine } from '../../utils/sseParser'
+import type { GitLabProject } from '../../../../server/api/projects.get'
+import ChatThread from '../../../components/ChatThread.vue'
+import ChatInput from '../../../components/ChatInput.vue'
+import { parseSSELine } from '../../../utils/sseParser'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -95,6 +95,7 @@ async function sendMessage(text: string) {
             <span class="hdr-status-dot" />
             <span class="hdr-status-lbl">processing</span>
           </div>
+          <NuxtLink :to="`/projects/${projectId}/dashboard`" class="hdr-link">Dashboard</NuxtLink>
           <button class="hdr-signout" @click="signOut({ callbackUrl: '/login' })">Déconnexion</button>
         </div>
       </div>
@@ -216,6 +217,27 @@ async function sendMessage(text: string) {
 @keyframes pulse {
   0%, 100% { opacity: 1; }
   50%       { opacity: 0.25; }
+}
+
+.hdr-link {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--txt-2);
+  text-decoration: none;
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  background: transparent;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  line-height: 1;
+}
+
+.hdr-link:hover {
+  color: var(--hi);
+  border-color: var(--hi);
+  background: color-mix(in srgb, var(--hi) 8%, transparent);
 }
 
 .hdr-signout {
