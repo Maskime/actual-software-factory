@@ -301,8 +301,11 @@ services:
       dockerfile: Dockerfile
     container_name: chat
     restart: unless-stopped
+    env_file:
+      - ../apps/chat/.env
     environment:
       NUXT_PORT: "3000"
+      NUXT_GITLAB_INTERNAL_URL: "http://gitlab"
     ports:
       - "${NUXT_PORT:-3000}:3000"
     networks:

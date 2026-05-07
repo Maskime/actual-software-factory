@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
+const { data: session, signOut } = useAuth()
 import ChatThread from '../components/ChatThread.vue'
 import ChatInput from '../components/ChatInput.vue'
 import { parseSSELine } from '../utils/sseParser'
@@ -82,6 +83,10 @@ async function sendMessage(text: string) {
           <span class="brand-mark" aria-hidden="true">◈</span>
           <span class="brand-name">Actual Software Factory</span>
         </div>
+        <div class="hdr-user">
+          <span class="hdr-username">{{ session?.user?.name ?? '' }}</span>
+          <button class="hdr-signout" @click="signOut({ callbackUrl: '/login' })">Déconnexion</button>
+        </div>
         <div v-if="isStreaming" class="hdr-status">
           <span class="hdr-status-dot" />
           <span class="hdr-status-lbl">processing</span>
@@ -161,6 +166,36 @@ html, body { margin: 0; padding: 0; background: var(--bg); }
   display: flex;
   align-items: center;
   justify-content: space-between;
+}
+
+.hdr-user {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.hdr-username {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--txt-2);
+}
+
+.hdr-signout {
+  background: none;
+  border: 1px solid var(--border-2);
+  border-radius: 3px;
+  padding: 0.2rem 0.6rem;
+  font-family: var(--mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.08em;
+  color: var(--txt-2);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.hdr-signout:hover {
+  border-color: var(--hi);
+  color: var(--hi);
 }
 
 .brand {

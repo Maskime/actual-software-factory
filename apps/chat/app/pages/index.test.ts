@@ -1,6 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { mount, flushPromises } from '@vue/test-utils'
+import { ref } from 'vue'
 import IndexPage from './index.vue'
+
+vi.stubGlobal('useAuth', () => ({
+  data: ref(null),
+  signOut: vi.fn(),
+}))
 
 function mockFetchOk(lines: string[]) {
   const encoder = new TextEncoder()
@@ -24,7 +30,7 @@ function mockFetchOk(lines: string[]) {
 
 async function sendMessage(w: ReturnType<typeof mount>, text = 'mon besoin') {
   await w.find('textarea').setValue(text)
-  await w.find('button').trigger('click')
+  await w.find('button[aria-label="Envoyer"]').trigger('click')
   await flushPromises()
 }
 

@@ -224,8 +224,53 @@ cp apps/chat/.env.example apps/chat/.env
 | `NUXT_ANTHROPIC_MODEL` | Non | Modèle Claude à utiliser (défaut : `claude-sonnet-4-6`) |
 | `NUXT_ANTHROPIC_SYSTEM_PROMPT` | Non | System prompt injecté côté serveur (défaut intégré si absent) |
 | `NUXT_PORT` | Non | Port d'écoute du serveur Nuxt (défaut : `3000`) |
+| `NEXTAUTH_SECRET` | ✅ | Secret de chiffrement des sessions — générer avec `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | ✅ | URL de base de l'application (ex : `http://localhost:3000`) |
+| `NUXT_GITLAB_CLIENT_ID` | ✅ | ID de l'application OAuth GitLab (voir section ci-dessous) |
+| `NUXT_GITLAB_CLIENT_SECRET` | ✅ | Secret de l'application OAuth GitLab |
+| `NUXT_GITLAB_URL` | Non | URL **publique** de GitLab — utilisée pour la redirection OAuth dans le navigateur (défaut : `http://localhost`) |
+| `NUXT_GITLAB_INTERNAL_URL` | Non | URL **interne** de GitLab — utilisée côté serveur pour l'échange de code et les appels userinfo. En Docker : `http://gitlab`. Si absent, hérite de `NUXT_GITLAB_URL`. |
 
-> **Sécurité :** `apps/chat/.env` est gitignored. La clé `NUXT_ANTHROPIC_API_KEY` n'est jamais transmise au navigateur — elle est lue exclusivement côté serveur.
+> **Sécurité :** `apps/chat/.env` est gitignored. Les clés `NUXT_ANTHROPIC_API_KEY`, `NEXTAUTH_SECRET` et les credentials GitLab OAuth ne sont jamais transmis au navigateur — ils sont lus exclusivement côté serveur.
+
+> **Docker — résolution réseau :** Le container `chat` ne peut pas joindre GitLab via `http://localhost` (qui pointe vers le container lui-même). `NUXT_GITLAB_INTERNAL_URL` est positionné à `http://gitlab` directement dans `docker-compose.yml` (bloc `environment` du service `chat`), de sorte que les appels serveur-à-serveur (token + userinfo) passent par `factory-network`. `NUXT_GITLAB_URL` reste à `http://localhost` pour que le navigateur soit redirigé vers la bonne adresse.
+
+### Authentification GitLab OAuth
+
+L'accès au portail chat est protégé par OAuth GitLab. Il faut créer une application OAuth dans l'interface d'administration GitLab avant le premier démarrage.
+
+**1. Créer l'application OAuth dans GitLab**
+
+Ouvre **GitLab → Admin Area → Applications** (`http://localhost/admin/applications`) et crée une nouvelle application :
+
+| Champ | Valeur |
+|---|---|
+| Nom | `Software Factory Chat` (ou tout autre nom) |
+| Redirect URI | `http://localhost:3000/api/auth/callback/gitlab` |
+| Trusted | ✅ (cocher) |
+| Scopes | `read_user`, `read_api` |
+
+Après validation, GitLab affiche l'**Application ID** et le **Secret** — note-les, ils ne sont visibles qu'une fois.
+
+**2. Générer un secret de session**
+
+```bash
+openssl rand -base64 32
+```
+
+**3. Renseigner les variables dans `apps/chat/.env`**
+
+```env
+NEXTAUTH_SECRET=<résultat de openssl ci-dessus>
+NEXTAUTH_URL=http://localhost:3000
+NUXT_GITLAB_CLIENT_ID=<Application ID>
+NUXT_GITLAB_CLIENT_SECRET=<Secret>
+NUXT_GITLAB_URL=http://localhost
+```
+
+`NUXT_GITLAB_INTERNAL_URL` n'est **pas** à mettre dans `apps/chat/.env` — il est défini dans `infrastructure/docker-compose.yml` car il est spécifique à l'environnement Docker. En dev local, cette variable est absente et le serveur utilise `NUXT_GITLAB_URL` pour tous les appels.
+
+> **Note :** si le portail chat tourne derrière un reverse-proxy ou en production, adapter `NEXTAUTH_URL` à l'URL publique, mettre à jour la Redirect URI de l'application GitLab, et ajuster `NUXT_GITLAB_INTERNAL_URL` si GitLab n'est pas accessible via `http://gitlab`.
 
 ### Démarrage
 
@@ -249,7 +294,7 @@ docker compose -f infrastructure/docker-compose.yml up -d chat
 
 | Service | URL | Credentials |
 |---|---|---|
-| Chat UI | http://localhost:3000 | — (accès local, pas d'auth) |
+| Chat UI | http://localhost:3000 | Compte GitLab (OAuth) |
 | GitLab CE | http://localhost | `root` / `GITLAB_ROOT_PASSWORD` |
 | GitLab SSH | ssh://localhost:2222 | — |
 | SonarQube | http://localhost:9000 | `admin` / `SONARQUBE_ADMIN_PASSWORD` |
