@@ -1,8 +1,19 @@
 <script setup lang="ts">
-defineProps<{
+import { computed } from 'vue'
+import { Marked } from 'marked'
+
+const props = defineProps<{
   role: 'user' | 'assistant'
   content: string
 }>()
+
+const md = new Marked({
+  renderer: {
+    html: () => '', // strip raw HTML blocks — only Markdown syntax is rendered
+  },
+})
+
+const renderedContent = computed(() => md.parse(props.content) as string)
 </script>
 
 <template>
@@ -14,11 +25,11 @@ defineProps<{
     </div>
   </div>
 
-  <!-- Assistant: structured output, left-aligned -->
+  <!-- Assistant: structured output, left-aligned, Markdown rendered -->
   <div v-else class="msg-asst-wrap">
     <div class="msg-asst">
       <div class="asst-label">factory</div>
-      <div class="asst-text">{{ content }}</div>
+      <div class="asst-text" v-html="renderedContent" />
     </div>
   </div>
 </template>
@@ -90,10 +101,22 @@ defineProps<{
 .asst-text {
   font-size: 0.8125rem;
   color: var(--txt);
-  white-space: pre-wrap;
   word-break: break-words;
   line-height: 1.75;
   font-family: var(--sans);
   font-weight: 300;
 }
+
+/* ── Markdown prose styles (rendered via v-html) ─────────── */
+
+.asst-text :deep(p)            { margin: 0 0 0.5rem; }
+.asst-text :deep(p:last-child) { margin-bottom: 0; }
+.asst-text :deep(hr)           { border: none; border-top: 1px solid var(--border); margin: 0.75rem 0; }
+.asst-text :deep(strong)       { font-weight: 600; color: var(--txt); }
+.asst-text :deep(em)           { font-style: italic; }
+.asst-text :deep(h2)           { font-size: 0.875rem; font-weight: 600; color: var(--hi); margin: 0.75rem 0 0.375rem; }
+.asst-text :deep(ul),
+.asst-text :deep(ol)           { padding-left: 1.25rem; margin: 0.25rem 0; }
+.asst-text :deep(li)           { margin: 0.1rem 0; }
+.asst-text :deep(code)         { font-family: var(--mono); font-size: 0.75em; background: var(--border); padding: 0.1em 0.3em; border-radius: 2px; }
 </style>
