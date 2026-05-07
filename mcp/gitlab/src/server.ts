@@ -43,6 +43,18 @@ import {
   getRepositoryTreeSchema,
   handleGetRepositoryTree,
 } from "./tools/branches.js";
+import {
+  listPipelinesSchema,
+  handleListPipelines,
+  getPipelineSchema,
+  handleGetPipeline,
+  listPipelineJobsSchema,
+  handleListPipelineJobs,
+  getJobLogSchema,
+  handleGetJobLog,
+  getTestReportSchema,
+  handleGetTestReport,
+} from "./tools/pipelines.js";
 
 export function buildMcpServer(client: GitLabClient): McpServer {
   const server = new McpServer({
@@ -181,6 +193,41 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     "List the contents of a directory in a GitLab repository for a given ref. Returns file and subdirectory entries with their paths and types. Supports recursive listing.",
     getRepositoryTreeSchema.shape,
     (params) => handleGetRepositoryTree(client, params)
+  );
+
+  server.tool(
+    "gitlab_list_pipelines",
+    "List CI/CD pipelines for a GitLab project. Supports filtering by branch/tag (ref) and status. Returns up to 100 pipelines per page.",
+    listPipelinesSchema.shape,
+    (params) => handleListPipelines(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_pipeline",
+    "Get the details of a GitLab CI/CD pipeline by its ID. Returns status, ref, SHA, duration, and URL.",
+    getPipelineSchema.shape,
+    (params) => handleGetPipeline(client, params)
+  );
+
+  server.tool(
+    "gitlab_list_pipeline_jobs",
+    "List the jobs of a GitLab CI/CD pipeline. Returns each job's name, stage, status, duration, and URL.",
+    listPipelineJobsSchema.shape,
+    (params) => handleListPipelineJobs(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_job_log",
+    "Get the stdout log of a GitLab CI/CD job. Logs exceeding max_bytes are truncated; the response includes a truncated flag and total byte count.",
+    getJobLogSchema.shape,
+    (params) => handleGetJobLog(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_test_report",
+    "Get the test report of a GitLab CI/CD pipeline. Returns total, success, failed, error, and skipped test counts plus per-suite breakdown. Returns a structured error if no test report exists for the pipeline.",
+    getTestReportSchema.shape,
+    (params) => handleGetTestReport(client, params)
   );
 
   return server;
