@@ -331,9 +331,13 @@ function otherLabels(labels: string[]): string[] {
 
 .card-num {
   font-family: var(--mono);
-  font-size: 0.5625rem;
-  color: var(--txt-3);
-  letter-spacing: 0.04em;
+  font-size: 0.625rem;
+  color: var(--txt-2);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 0.05rem 0.3rem;
+  line-height: 1.6;
 }
 
 .card-title {
