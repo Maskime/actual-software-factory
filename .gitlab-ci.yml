@@ -104,7 +104,7 @@ mirror-to-github:
     - chmod 644 ~/.ssh/known_hosts
   script:
     - git remote add github git@github.com:Maskime/actual-software-factory.git
-    - git push github --all --force
+    - git push github "+refs/remotes/origin/*:refs/heads/*"
     - git push github --tags --force
   rules:
     - if: $CI_COMMIT_BRANCH == 'main'
