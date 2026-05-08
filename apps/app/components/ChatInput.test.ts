@@ -54,16 +54,40 @@ describe('ChatInput — submit()', () => {
 })
 
 describe('ChatInput — handleKeydown()', () => {
-  it('calls preventDefault and submits on Enter', async () => {
+  it('calls preventDefault and submits on Ctrl+Enter', async () => {
     const w = mountInput()
     await w.find('textarea').setValue('hello')
-    const event = new KeyboardEvent('keydown', { key: 'Enter', shiftKey: false, bubbles: true })
+    const event = new KeyboardEvent('keydown', { key: 'Enter', ctrlKey: true, bubbles: true })
     const prevented = { called: false }
     event.preventDefault = () => { prevented.called = true }
     w.find('textarea').element.dispatchEvent(event)
     await w.vm.$nextTick()
     expect(prevented.called).toBe(true)
     expect(w.emitted('send')).toEqual([['hello']])
+  })
+
+  it('calls preventDefault and submits on Meta+Enter', async () => {
+    const w = mountInput()
+    await w.find('textarea').setValue('hello')
+    const event = new KeyboardEvent('keydown', { key: 'Enter', metaKey: true, bubbles: true })
+    const prevented = { called: false }
+    event.preventDefault = () => { prevented.called = true }
+    w.find('textarea').element.dispatchEvent(event)
+    await w.vm.$nextTick()
+    expect(prevented.called).toBe(true)
+    expect(w.emitted('send')).toEqual([['hello']])
+  })
+
+  it('does NOT submit on bare Enter', async () => {
+    const w = mountInput()
+    await w.find('textarea').setValue('hello')
+    const event = new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })
+    const prevented = { called: false }
+    event.preventDefault = () => { prevented.called = true }
+    w.find('textarea').element.dispatchEvent(event)
+    await w.vm.$nextTick()
+    expect(prevented.called).toBe(false)
+    expect(w.emitted('send')).toBeFalsy()
   })
 
   it('does not submit on Shift+Enter', async () => {
