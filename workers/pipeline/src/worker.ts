@@ -1,5 +1,5 @@
 import { Worker, NativeConnection } from '@temporalio/worker';
-import { fileURLToPath } from 'url';
+import { fileURLToPath } from 'node:url';
 import * as gitlabActivities from './activities/gitlab.js';
 import * as agentActivities from './activities/agents.js';
 
