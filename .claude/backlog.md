@@ -89,6 +89,11 @@
 - [US-07] M2 : Les secrets transversaux dans `.env.example` (`ANTHROPIC_API_KEY`, `GITLAB_API_TOKEN`, etc.) sont requis dès EPIC-02 mais non validés au lancement de `docker compose up` — ajouter un guard de présence dans les scripts de setup qui en dépendent
 - [US-07] M3 : `SONARQUBE_AGENT_TOKEN` dans `.env.example` coexiste avec les tokens SonarQube existants (`factory-scanner`, `gitlab-ci-scanner`) — consolider en un seul token partagé lors de l'implémentation EPIC-07
 
+## Ticket #24 (US-07 — Décomposition automatique en issues GitLab)
+
+- [Ticket-24] M1 : Aucun test unitaire couvrant la validation Zod (`min(2)`, `max(8)`), le label `agent-ready`, et l'affichage du bloc `technical_notes` dans la description d'issue
+- [Ticket-24] M2 : Erreurs de création d'issues silencieuses côté client — l'API retourne HTTP 200 avec `issues: []` même en cas d'échec ; envisager un champ `errors: [{title, status}]` dans la réponse pour informer le frontend
+
 ## EPIC-02 / US-07 (Tests round-trip MCP)
 
 - [US-07] M1 : Absence de health-check préalable à la connexion MCP — un serveur non disponible produit un FAIL indiscernable d'un vrai échec fonctionnel pour GitLab et Temporal (SonarQube bénéficie d'un SKIP, les deux autres non)

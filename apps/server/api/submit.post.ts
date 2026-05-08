@@ -2,11 +2,24 @@ import { getToken } from '#auth'
 import { defineEventHandler, createError, readBody } from 'h3'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
-import type { EpicData } from '../../app/utils/sseParser'
+import { z } from 'zod'
+
+const UserStorySchema = z.object({
+  title: z.string(),
+  description: z.string(),
+  acceptance_criteria: z.array(z.string()),
+  technical_notes: z.string().optional(),
+})
+
+const EpicDataSchema = z.object({
+  epic_title: z.string(),
+  epic_description: z.string(),
+  user_stories: z.array(UserStorySchema).min(2).max(8),
+})
 
 interface SubmitBody {
   projectId: number
-  epicData: EpicData
+  epicData: unknown
 }
 
 interface EpicResult {
@@ -53,7 +66,16 @@ export default defineEventHandler(async (event) => {
     throw createError({ statusCode: 400, message: 'projectId et epicData sont requis' })
   }
 
-  const { epicData, projectId } = body
+  const { projectId } = body
+  const parsed = EpicDataSchema.safeParse(body.epicData)
+  if (!parsed.success) {
+    throw createError({
+      statusCode: 400,
+      message: `epicData invalide : ${parsed.error.issues.map(i => i.message).join(', ')}`,
+    })
+  }
+  const epicData = parsed.data
+
   const config = useRuntimeConfig(event)
   const baseUrl = (config.gitlabInternalUrl as string) || (config.gitlabUrl as string)
   const accessToken = token.accessToken as string
@@ -66,7 +88,7 @@ export default defineEventHandler(async (event) => {
       mcpGitlabUrl,
       targetProjectId,
       epicData.epic_title,
-      epicData.epic_description ?? ''
+      epicData.epic_description
     )
   } catch (err) {
     const detail = err instanceof Error ? err.message : String(err)
@@ -78,14 +100,15 @@ export default defineEventHandler(async (event) => {
   for (const us of epicData.user_stories) {
     const criteriaLines = us.acceptance_criteria.map(c => `- ${c}`).join('\n')
     const criteriaBlock = criteriaLines ? `\n\n## Critères d'acceptance\n\n${criteriaLines}` : ''
+    const notesBlock = us.technical_notes ? `\n\n## Notes techniques\n\n${us.technical_notes}` : ''
 
-    const issueRes = await fetch(`${baseUrl}/api/v4/projects/${projectId}/issues`, {
+    const issueRes = await fetch(`${baseUrl}/api/v4/projects/${targetProjectId}/issues`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
         title: us.title,
-        description: `${us.description}${criteriaBlock}\n\n---\n\n_Lié à l'epic #${epic.iid}_`,
-        labels: 'user-story',
+        description: `${us.description}${criteriaBlock}${notesBlock}\n\n---\n\n_Lié à l'epic #${epic.iid}_`,
+        labels: 'agent-ready',
       }),
     })
 
@@ -93,15 +116,17 @@ export default defineEventHandler(async (event) => {
       const issue: { iid: number; title: string; web_url: string } = await issueRes.json()
       createdIssues.push({ iid: issue.iid, title: issue.title, web_url: issue.web_url })
 
-      await fetch(`${baseUrl}/api/v4/projects/${projectId}/issues/${issue.iid}/links`, {
+      await fetch(`${baseUrl}/api/v4/projects/${targetProjectId}/issues/${issue.iid}/links`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          target_project_id: projectId,
+          target_project_id: targetProjectId,
           target_issue_iid: epic.iid,
           link_type: 'relates_to',
         }),
       })
+    } else {
+      console.error(`[submit] Échec création issue "${us.title}" : HTTP ${issueRes.status}`)
     }
   }
 

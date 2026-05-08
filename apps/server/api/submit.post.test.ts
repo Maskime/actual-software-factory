@@ -211,4 +211,104 @@ describe('submit.post handler', () => {
       },
     })
   })
+
+  it('throws 400 when epicData has fewer than 2 user stories (Zod validation)', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'tok' } as any)
+    vi.mocked(h3.readBody).mockResolvedValue({
+      projectId: 3,
+      epicData: { ...sampleEpicData, user_stories: [sampleEpicData.user_stories[0]] },
+    })
+
+    await expect((handler as Function)(mockEvent)).rejects.toMatchObject({ statusCode: 400 })
+  })
+
+  it('throws 400 when epicData has more than 8 user stories (Zod validation)', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'tok' } as any)
+    const tooManyStories = Array.from({ length: 9 }, (_, i) => ({
+      title: `US-${i}`,
+      description: 'desc',
+      acceptance_criteria: [],
+    }))
+    vi.mocked(h3.readBody).mockResolvedValue({
+      projectId: 3,
+      epicData: { ...sampleEpicData, user_stories: tooManyStories },
+    })
+
+    await expect((handler as Function)(mockEvent)).rejects.toMatchObject({ statusCode: 400 })
+  })
+
+  it('throws 400 when epicData structure is invalid (Zod validation)', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'tok' } as any)
+    vi.mocked(h3.readBody).mockResolvedValue({ projectId: 3, epicData: { epic_title: 42 } })
+
+    await expect((handler as Function)(mockEvent)).rejects.toMatchObject({ statusCode: 400 })
+  })
+
+  it('uses label agent-ready on created issues', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'tok' } as any)
+    vi.mocked(h3.readBody).mockResolvedValue({ projectId: 3, epicData: sampleEpicData })
+
+    const fetchMock = makeFetchSequence([
+      { ok: true, json: { iid: 11, title: 'US-01', web_url: '' } },
+      { ok: true, json: {} },
+      { ok: true, json: { iid: 12, title: 'US-02', web_url: '' } },
+      { ok: true, json: {} },
+    ])
+    vi.stubGlobal('fetch', fetchMock)
+
+    await (handler as Function)(mockEvent)
+
+    const issueBody = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(issueBody.labels).toBe('agent-ready')
+  })
+
+  it('includes technical_notes block in issue description when present', async () => {
+    const epicWithNotes = {
+      ...sampleEpicData,
+      user_stories: [
+        { ...sampleEpicData.user_stories[0], technical_notes: 'Utiliser Redis pour le cache' },
+        sampleEpicData.user_stories[1],
+      ],
+    }
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'tok' } as any)
+    vi.mocked(h3.readBody).mockResolvedValue({ projectId: 3, epicData: epicWithNotes })
+
+    const fetchMock = makeFetchSequence([
+      { ok: true, json: { iid: 11, title: 'US-01', web_url: '' } },
+      { ok: true, json: {} },
+      { ok: true, json: { iid: 12, title: 'US-02', web_url: '' } },
+      { ok: true, json: {} },
+    ])
+    vi.stubGlobal('fetch', fetchMock)
+
+    await (handler as Function)(mockEvent)
+
+    const us01Body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(us01Body.description).toContain('Notes techniques')
+    expect(us01Body.description).toContain('Utiliser Redis pour le cache')
+
+    const us02Body = JSON.parse(fetchMock.mock.calls[2][1].body)
+    expect(us02Body.description).not.toContain('Notes techniques')
+  })
+
+  it('skips failed issue creation and does not add to createdIssues', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'tok' } as any)
+    vi.mocked(h3.readBody).mockResolvedValue({ projectId: 3, epicData: sampleEpicData })
+
+    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    vi.stubGlobal('fetch', makeFetchSequence([
+      { ok: false },              // US-01 creation fails
+      { ok: true, json: { iid: 12, title: 'US-02', web_url: 'http://gitlab/issues/12' } },
+      { ok: true, json: {} },     // link US-02 → epic
+    ]))
+
+    const result = await (handler as Function)(mockEvent)
+
+    expect(result.issues).toHaveLength(1)
+    expect(result.issues[0].iid).toBe(12)
+    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Échec création issue'))
+
+    consoleSpy.mockRestore()
+  })
 })
