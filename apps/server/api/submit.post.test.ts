@@ -183,7 +183,7 @@ describe('submit.post handler', () => {
 
     const us01Body = JSON.parse(fetchMock.mock.calls[0][1].body)
     expect(us01Body.description).toContain("Critères d'acceptance")
-    expect(us01Body.description).toContain('- La page est accessible')
+    expect(us01Body.description).toContain('- [ ] La page est accessible')
 
     const us02Body = JSON.parse(fetchMock.mock.calls[2][1].body)
     expect(us02Body.description).not.toContain("Critères d'acceptance")
@@ -289,6 +289,85 @@ describe('submit.post handler', () => {
 
     const us02Body = JSON.parse(fetchMock.mock.calls[2][1].body)
     expect(us02Body.description).not.toContain('Notes techniques')
+  })
+
+  it('prefixes issue title with [EPIC-iid]', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'tok' } as any)
+    vi.mocked(h3.readBody).mockResolvedValue({ projectId: 3, epicData: sampleEpicData })
+
+    const fetchMock = makeFetchSequence([
+      { ok: true, json: { iid: 11, title: '[EPIC-10] US-01 — Accès', web_url: '' } },
+      { ok: true, json: {} },
+      { ok: true, json: { iid: 12, title: '[EPIC-10] US-02 — Export', web_url: '' } },
+      { ok: true, json: {} },
+    ])
+    vi.stubGlobal('fetch', fetchMock)
+
+    await (handler as Function)(mockEvent)
+
+    const us01Body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(us01Body.title).toBe('[EPIC-10] US-01 — Accès')
+
+    const us02Body = JSON.parse(fetchMock.mock.calls[2][1].body)
+    expect(us02Body.title).toBe('[EPIC-10] US-02 — Export')
+  })
+
+  it('includes context section in issue description when present', async () => {
+    const epicWithContext = {
+      ...sampleEpicData,
+      user_stories: [
+        { ...sampleEpicData.user_stories[0], context: 'Besoin métier de faciliter l\'accès' },
+        sampleEpicData.user_stories[1],
+      ],
+    }
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'tok' } as any)
+    vi.mocked(h3.readBody).mockResolvedValue({ projectId: 3, epicData: epicWithContext })
+
+    const fetchMock = makeFetchSequence([
+      { ok: true, json: { iid: 11, title: 'US-01', web_url: '' } },
+      { ok: true, json: {} },
+      { ok: true, json: { iid: 12, title: 'US-02', web_url: '' } },
+      { ok: true, json: {} },
+    ])
+    vi.stubGlobal('fetch', fetchMock)
+
+    await (handler as Function)(mockEvent)
+
+    const us01Body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(us01Body.description).toContain('## Contexte')
+    expect(us01Body.description).toContain('Besoin métier de faciliter l\'accès')
+
+    const us02Body = JSON.parse(fetchMock.mock.calls[2][1].body)
+    expect(us02Body.description).not.toContain('## Contexte')
+  })
+
+  it('includes technical_constraints section in issue description when present', async () => {
+    const epicWithConstraints = {
+      ...sampleEpicData,
+      user_stories: [
+        { ...sampleEpicData.user_stories[0], technical_constraints: 'Doit utiliser Redis pour le cache' },
+        sampleEpicData.user_stories[1],
+      ],
+    }
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'tok' } as any)
+    vi.mocked(h3.readBody).mockResolvedValue({ projectId: 3, epicData: epicWithConstraints })
+
+    const fetchMock = makeFetchSequence([
+      { ok: true, json: { iid: 11, title: 'US-01', web_url: '' } },
+      { ok: true, json: {} },
+      { ok: true, json: { iid: 12, title: 'US-02', web_url: '' } },
+      { ok: true, json: {} },
+    ])
+    vi.stubGlobal('fetch', fetchMock)
+
+    await (handler as Function)(mockEvent)
+
+    const us01Body = JSON.parse(fetchMock.mock.calls[0][1].body)
+    expect(us01Body.description).toContain('## Contraintes techniques')
+    expect(us01Body.description).toContain('Doit utiliser Redis pour le cache')
+
+    const us02Body = JSON.parse(fetchMock.mock.calls[2][1].body)
+    expect(us02Body.description).not.toContain('## Contraintes techniques')
   })
 
   it('skips failed issue creation and does not add to createdIssues', async () => {
