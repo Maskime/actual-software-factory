@@ -14,7 +14,7 @@ const text = ref('')
 const canSend = computed(() => text.value.trim().length > 0 && !props.disabled)
 
 function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
     e.preventDefault()
     submit()
   }
@@ -57,8 +57,8 @@ function submit() {
         </button>
       </div>
       <div class="prompt-hints">
-        <span><kbd>↵</kbd> envoyer</span>
-        <span><kbd>⇧↵</kbd> nouvelle ligne</span>
+        <span><kbd>Ctrl+↵</kbd> envoyer</span>
+        <span><kbd>↵</kbd> nouvelle ligne</span>
       </div>
     </div>
   </div>
