@@ -49,6 +49,47 @@ const PROPOSE_EPIC_TOOL: Anthropic.Tool = {
   },
 }
 
+interface StreamState {
+  currentBlockType: string | null
+  toolInputJson: string
+}
+
+function flushToolBlock(
+  state: StreamState,
+  controller: ReadableStreamDefaultController,
+  encoder: TextEncoder,
+): void {
+  if (state.currentBlockType !== 'tool_use') return
+  try {
+    const epicData = JSON.parse(state.toolInputJson) as EpicData
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify({ __epic_data: epicData })}\n\n`))
+    controller.enqueue(encoder.encode(`data: ${JSON.stringify(renderEpic(epicData))}\n\n`))
+  } catch {
+    // malformed JSON — skip
+  }
+}
+
+function processChunk(
+  chunk: Anthropic.RawMessageStreamEvent,
+  state: StreamState,
+  controller: ReadableStreamDefaultController,
+  encoder: TextEncoder,
+): void {
+  if (chunk.type === 'content_block_start') {
+    state.currentBlockType = chunk.content_block.type
+    if (chunk.content_block.type === 'tool_use') state.toolInputJson = ''
+  } else if (chunk.type === 'content_block_delta') {
+    if (chunk.delta.type === 'text_delta') {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk.delta.text)}\n\n`))
+    } else if (chunk.delta.type === 'input_json_delta') {
+      state.toolInputJson += chunk.delta.partial_json
+    }
+  } else if (chunk.type === 'content_block_stop') {
+    flushToolBlock(state, controller, encoder)
+    state.currentBlockType = null
+  }
+}
+
 function renderEpic(input: EpicData): string {
   const lines: string[] = [
     `## Epic : ${input.epic_title}`,
@@ -168,35 +209,9 @@ export default defineEventHandler(async (event) => {
           messages: body.messages!,
         })
 
-        let currentBlockType: string | null = null
-        let toolInputJson = ''
-
+        const state: StreamState = { currentBlockType: null, toolInputJson: '' }
         for await (const chunk of anthropicStream) {
-          if (chunk.type === 'content_block_start') {
-            currentBlockType = chunk.content_block.type
-            if (chunk.content_block.type === 'tool_use') {
-              toolInputJson = ''
-            }
-          } else if (chunk.type === 'content_block_delta') {
-            if (chunk.delta.type === 'text_delta') {
-              controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk.delta.text)}\n\n`))
-            } else if (chunk.delta.type === 'input_json_delta') {
-              toolInputJson += chunk.delta.partial_json
-            }
-          } else if (chunk.type === 'content_block_stop') {
-            if (currentBlockType === 'tool_use') {
-              try {
-                const epicData = JSON.parse(toolInputJson) as EpicData
-                // Send structured data for the client to store (used at submit time)
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ __epic_data: epicData })}\n\n`))
-                // Send rendered Markdown with [FOR_VALIDATION] tag for display
-                controller.enqueue(encoder.encode(`data: ${JSON.stringify(renderEpic(epicData))}\n\n`))
-              } catch {
-                // malformed JSON — skip
-              }
-            }
-            currentBlockType = null
-          }
+          processChunk(chunk, state, controller, encoder)
         }
 
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
