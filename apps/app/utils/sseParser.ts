@@ -3,6 +3,8 @@ export interface UserStoryData {
   description: string
   acceptance_criteria: string[]
   technical_notes?: string
+  context?: string
+  technical_constraints?: string
 }
 
 export interface EpicData {

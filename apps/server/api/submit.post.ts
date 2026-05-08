@@ -9,6 +9,8 @@ const UserStorySchema = z.object({
   description: z.string(),
   acceptance_criteria: z.array(z.string()),
   technical_notes: z.string().optional(),
+  context: z.string().optional(),
+  technical_constraints: z.string().optional(),
 })
 
 const EpicDataSchema = z.object({
@@ -98,16 +100,28 @@ export default defineEventHandler(async (event) => {
   const createdIssues: Array<{ iid: number; title: string; web_url: string }> = []
 
   for (const us of epicData.user_stories) {
-    const criteriaLines = us.acceptance_criteria.map(c => `- ${c}`).join('\n')
-    const criteriaBlock = criteriaLines ? `\n\n## Critères d'acceptance\n\n${criteriaLines}` : ''
-    const notesBlock = us.technical_notes ? `\n\n## Notes techniques\n\n${us.technical_notes}` : ''
+    const sections: string[] = []
+
+    if (us.context) sections.push(`## Contexte\n\n${us.context}`)
+    sections.push(`## Description\n\n${us.description}`)
+
+    if (us.acceptance_criteria.length) {
+      const list = us.acceptance_criteria.map(c => `- [ ] ${c}`).join('\n')
+      sections.push(`## Critères d'acceptance\n\n${list}`)
+    }
+
+    if (us.technical_notes) sections.push(`## Notes techniques\n\n${us.technical_notes}`)
+    if (us.technical_constraints) sections.push(`## Contraintes techniques\n\n${us.technical_constraints}`)
+
+    sections.push(`---\n\n_Lié à l'epic #${epic.iid}_`)
+    const description = sections.join('\n\n')
 
     const issueRes = await fetch(`${baseUrl}/api/v4/projects/${targetProjectId}/issues`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        title: us.title,
-        description: `${us.description}${criteriaBlock}${notesBlock}\n\n---\n\n_Lié à l'epic #${epic.iid}_`,
+        title: `[EPIC-${epic.iid}] ${us.title}`,
+        description,
         labels: 'agent-ready',
       }),
     })
