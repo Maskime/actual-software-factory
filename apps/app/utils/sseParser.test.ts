@@ -37,4 +37,19 @@ describe('parseSSELine', () => {
   it('JSON-decodes a string containing an escaped newline', () => {
     expect(parseSSELine('data: "line1\\nline2"')).toBe('line1\nline2')
   })
+
+  it('returns an SSEEpicEvent object for __epic_data payload', () => {
+    const epicData = {
+      epic_title: 'Mon epic',
+      epic_description: 'Description',
+      user_stories: [{ title: 'US-01', description: 'En tant que...', acceptance_criteria: ['AC1'] }],
+    }
+    const line = `data: ${JSON.stringify({ __epic_data: epicData })}`
+    const result = parseSSELine(line)
+    expect(result).toEqual({ __epic_data: epicData })
+  })
+
+  it('returns undefined for a non-string, non-epic JSON object', () => {
+    expect(parseSSELine('data: {"foo":"bar"}')).toBeUndefined()
+  })
 })

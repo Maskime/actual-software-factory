@@ -24,8 +24,8 @@ describe('auth handler config', () => {
     expect(providerOpts.token).toBe('http://localhost/oauth/token')
   })
 
-  it('sets authorization scope to read_user read_api', () => {
-    expect(providerOpts.authorization.params.scope).toBe('read_user read_api')
+  it('sets authorization scope to read_user api', () => {
+    expect(providerOpts.authorization.params.scope).toBe('read_user api')
   })
 
   describe('profile()', () => {
