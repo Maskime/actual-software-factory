@@ -21,6 +21,14 @@ describe('ChatThread', () => {
     expect(w.find('.streaming-cursor').exists()).toBe(true)
   })
 
+  it('does not render an empty ChatMessage bubble while streaming', () => {
+    const streaming = [...messages, { role: 'assistant' as const, content: '' }]
+    const w = mount(ChatThread, { props: { messages: streaming, isStreaming: true } })
+    const chatMessages = w.findAllComponents(ChatMessage)
+    // Les 2 messages existants sont rendus, le placeholder vide ne l'est pas
+    expect(chatMessages).toHaveLength(2)
+  })
+
   it('hides typing indicator when not streaming', () => {
     const w = mount(ChatThread, { props: { messages, isStreaming: false } })
     expect(w.find('.streaming-cursor').exists()).toBe(false)
