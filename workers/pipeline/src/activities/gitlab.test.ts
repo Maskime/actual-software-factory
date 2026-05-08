@@ -45,10 +45,13 @@ describe('applyWorkflowLabel', () => {
     )
   })
 
-  it('throws nonRetryable ApplicationFailure on 4xx', async () => {
+  it('throws nonRetryable ApplicationFailure with type GitLabClientError on 4xx', async () => {
     vi.stubGlobal('fetch', mockFetch(403, false))
     await expect(applyWorkflowLabel(3, 42, 'workflow::dev')).rejects.toSatisfy(
-      (err: unknown) => err instanceof ApplicationFailure && err.nonRetryable === true
+      (err: unknown) =>
+        err instanceof ApplicationFailure &&
+        err.nonRetryable === true &&
+        err.type === 'GitLabClientError'
     )
   })
 
@@ -60,10 +63,13 @@ describe('applyWorkflowLabel', () => {
     )
   })
 
-  it('throws nonRetryable when GITLAB_API_TOKEN is missing', async () => {
+  it('throws nonRetryable MissingConfigError when GITLAB_API_TOKEN is missing', async () => {
     delete process.env.GITLAB_API_TOKEN
     await expect(applyWorkflowLabel(3, 42, 'workflow::dev')).rejects.toSatisfy(
-      (err: unknown) => err instanceof ApplicationFailure && err.nonRetryable === true
+      (err: unknown) =>
+        err instanceof ApplicationFailure &&
+        err.nonRetryable === true &&
+        err.type === 'MissingConfigError'
     )
   })
 })
@@ -95,10 +101,13 @@ describe('closeIssue', () => {
     )
   })
 
-  it('throws nonRetryable on 4xx', async () => {
+  it('throws nonRetryable GitLabClientError on 4xx', async () => {
     vi.stubGlobal('fetch', mockFetch(404, false))
     await expect(closeIssue(3, 42)).rejects.toSatisfy(
-      (err: unknown) => err instanceof ApplicationFailure && err.nonRetryable === true
+      (err: unknown) =>
+        err instanceof ApplicationFailure &&
+        err.nonRetryable === true &&
+        err.type === 'GitLabClientError'
     )
   })
 })

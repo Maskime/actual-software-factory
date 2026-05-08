@@ -1,11 +1,35 @@
 import { Worker, NativeConnection } from '@temporalio/worker';
 import { fileURLToPath } from 'node:url';
+import webpack from 'webpack';
 import * as gitlabActivities from './activities/gitlab.js';
 import * as agentActivities from './activities/agents.js';
 
 const TASK_QUEUE = process.env.TEMPORAL_TASK_QUEUE ?? 'factory-pipeline';
 const NAMESPACE  = process.env.TEMPORAL_NAMESPACE  ?? 'factory';
 const ADDRESS    = process.env.TEMPORAL_ADDRESS    ?? 'localhost:7233';
+
+// Activity config env vars are read here (worker process) and injected as
+// compile-time string constants into the workflow bundle via DefinePlugin,
+// so config.ts can use them regardless of workflow sandbox process access.
+const WORKFLOW_ENV_DEFAULTS: Record<string, string> = {
+  GITLAB_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT: '10 minutes',
+  GITLAB_ACTIVITY_START_TO_CLOSE_TIMEOUT:    '30 seconds',
+  GITLAB_ACTIVITY_MAX_ATTEMPTS:              '5',
+  GITLAB_ACTIVITY_INITIAL_INTERVAL:          '5s',
+  GITLAB_ACTIVITY_BACKOFF_COEFFICIENT:       '2',
+  AGENT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT:  '4 hours',
+  AGENT_ACTIVITY_START_TO_CLOSE_TIMEOUT:     '60 minutes',
+  AGENT_ACTIVITY_MAX_ATTEMPTS:               '3',
+  AGENT_ACTIVITY_INITIAL_INTERVAL:           '30s',
+  AGENT_ACTIVITY_BACKOFF_COEFFICIENT:        '2',
+};
+
+const workflowDefines = Object.fromEntries(
+  Object.entries(WORKFLOW_ENV_DEFAULTS).map(([key, defaultValue]) => [
+    `process.env.${key}`,
+    JSON.stringify(process.env[key] ?? defaultValue),
+  ])
+);
 
 const connection = await NativeConnection.connect({ address: ADDRESS });
 
@@ -15,6 +39,12 @@ const worker = await Worker.create({
   workflowsPath: fileURLToPath(new URL('./workflow.js', import.meta.url)),
   activities: { ...gitlabActivities, ...agentActivities },
   taskQueue: TASK_QUEUE,
+  bundlerOptions: {
+    webpackConfigHook(config) {
+      config.plugins = [...(config.plugins ?? []), new webpack.DefinePlugin(workflowDefines)];
+      return config;
+    },
+  },
 });
 
 process.on('SIGTERM', () => worker.shutdown());

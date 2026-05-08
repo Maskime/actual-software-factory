@@ -3,18 +3,15 @@ import type * as gitlab from './activities/gitlab.js';
 import type * as agents from './activities/agents.js';
 import type { PipelineInput } from './types.js';
 import { WORKFLOW_LABELS } from './types.js';
+import { gitlabActivityOptions, agentActivityOptions } from './config.js';
 
-const { applyWorkflowLabel, closeIssue } = proxyActivities<typeof gitlab>({
-  startToCloseTimeout: '1 minute',
-  retry: { maximumAttempts: 5, initialInterval: '5s' },
-});
+const { applyWorkflowLabel, closeIssue } = proxyActivities<typeof gitlab>(
+  gitlabActivityOptions()
+);
 
 const { runDevAgent, runReviewAgent, runFixReviewAgent,
         runStaticAnalysisAgent, runFixStaticAgent, runMergeAgent } =
-  proxyActivities<typeof agents>({
-    startToCloseTimeout: '60 minutes',
-    retry: { maximumAttempts: 3, initialInterval: '30s', backoffCoefficient: 2 },
-  });
+  proxyActivities<typeof agents>(agentActivityOptions());
 
 export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   const { issueIid: iid, projectId: pid } = input;

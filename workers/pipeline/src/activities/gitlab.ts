@@ -5,7 +5,7 @@ const ALL_WORKFLOW_LABELS = 'workflow::dev,workflow::review,workflow::fix,workfl
 function gitlabConfig(): { baseUrl: string; token: string } {
   const baseUrl = process.env.GITLAB_API_URL ?? 'http://gitlab/api/v4';
   const token = process.env.GITLAB_API_TOKEN;
-  if (!token) throw ApplicationFailure.nonRetryable('GITLAB_API_TOKEN is not set');
+  if (!token) throw ApplicationFailure.nonRetryable('GITLAB_API_TOKEN is not set', 'MissingConfigError');
   return { baseUrl, token };
 }
 
@@ -21,7 +21,8 @@ async function gitlabPut(
   });
   if (res.status >= 400 && res.status < 500) {
     throw ApplicationFailure.nonRetryable(
-      `GitLab API client error ${res.status} on PUT ${url}`
+      `GitLab API client error ${res.status} on PUT ${url}`,
+      'GitLabClientError'
     );
   }
   if (!res.ok) {
