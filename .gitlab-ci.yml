@@ -25,12 +25,14 @@ test:
   script:
     - npm ci
     - npm run test:coverage -w @factory/mcp-gitlab
+    - npm run test:coverage -w @factory/worker-pipeline
     - npx nuxi prepare --cwd apps
     - npm run test:coverage -w @factory/portal
   artifacts:
     when: always
     paths:
       - mcp/gitlab/coverage/
+      - workers/pipeline/coverage/
       - apps/coverage/
     expire_in: 1 day
   rules:

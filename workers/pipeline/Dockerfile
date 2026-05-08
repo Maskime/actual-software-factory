@@ -10,4 +10,5 @@ WORKDIR /app
 COPY package.json ./
 RUN npm install --omit=dev
 COPY --from=builder /app/dist ./dist
+USER node
 CMD ["node", "dist/worker.js"]
