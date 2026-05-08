@@ -16,7 +16,6 @@ export const createEpicSchema = z.object({
   labels: z
     .string()
     .optional()
-    .default("qualification-interface")
     .describe("Comma-separated label names (default: qualification-interface)"),
 });
 
