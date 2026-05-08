@@ -27,3 +27,4 @@ secrets/
 **/dist
 
 **/coverage
+visual_feedback/*

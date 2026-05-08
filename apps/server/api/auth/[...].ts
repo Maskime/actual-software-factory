@@ -31,7 +31,7 @@ export default NuxtAuthHandler({
       clientSecret: process.env.NUXT_GITLAB_CLIENT_SECRET!,
       authorization: {
         url: `${gitlabPublicUrl}/oauth/authorize`,
-        params: { scope: 'read_user read_api', response_type: 'code' },
+        params: { scope: 'read_user api', response_type: 'code' },
       },
       token: `${gitlabInternalUrl}/oauth/token`,
       userinfo: {

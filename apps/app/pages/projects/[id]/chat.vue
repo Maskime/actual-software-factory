@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, nextTick } from 'vue'
 import type { GitLabProject } from '../../../../server/api/projects.get'
+import type { EpicData } from '../../../utils/sseParser'
 import ChatThread from '../../../components/ChatThread.vue'
 import ChatInput from '../../../components/ChatInput.vue'
 import { parseSSELine } from '../../../utils/sseParser'
@@ -8,6 +9,11 @@ import { parseSSELine } from '../../../utils/sseParser'
 interface Message {
   role: 'user' | 'assistant'
   content: string
+}
+
+interface SubmitResult {
+  epic: { iid: number; web_url: string; title: string }
+  issues: Array<{ iid: number; title: string; web_url: string }>
 }
 
 const route = useRoute()
@@ -21,12 +27,44 @@ const messages = ref<Message[]>([])
 const isStreaming = ref(false)
 const error = ref<string | null>(null)
 const threadRef = ref<HTMLElement | null>(null)
+const isSubmitting = ref(false)
+const submitResult = ref<SubmitResult | null>(null)
+const submitError = ref<string | null>(null)
+const epicData = ref<EpicData | null>(null)
+
+async function submitNeed() {
+  if (!epicData.value) return
+
+  isSubmitting.value = true
+  submitError.value = null
+
+  try {
+    const res = await fetch('/api/submit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId, epicData: epicData.value }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data?.message ?? `Erreur serveur : ${res.status}`)
+    }
+    submitResult.value = await res.json()
+  } catch (e) {
+    submitError.value = e instanceof Error ? e.message : 'Erreur de soumission'
+  } finally {
+    isSubmitting.value = false
+  }
+}
 
 async function processLines(lines: string[], assistantMsg: Message): Promise<boolean> {
   for (const line of lines) {
     const result = parseSSELine(line)
     if (result === null) return true
     if (result === undefined) continue
+    if (typeof result === 'object' && '__epic_data' in result) {
+      epicData.value = result.__epic_data
+      continue
+    }
     assistantMsg.content += result
     await nextTick()
     if (threadRef.value) {
@@ -61,6 +99,9 @@ async function sendMessage(text: string) {
   messages.value.push(assistantMsg)
   isStreaming.value = true
   error.value = null
+  submitResult.value = null
+  submitError.value = null
+  epicData.value = null
 
   try {
     const response = await fetch('/api/chat', {
@@ -108,14 +149,34 @@ async function sendMessage(text: string) {
     </div>
 
     <div v-else ref="threadRef" class="thread-scroll">
-      <ChatThread :messages="messages" :is-streaming="isStreaming" />
+      <ChatThread
+        :messages="messages"
+        :is-streaming="isStreaming"
+        :can-submit="!isStreaming && !isSubmitting && !submitResult"
+        :is-submitting="isSubmitting"
+        @submit="submitNeed"
+      />
     </div>
 
-    <div v-if="error" class="err-bar">
-      <span class="err-tag">erreur</span>{{ error }}
+    <div v-if="error || submitError" class="err-bar">
+      <span class="err-tag">erreur</span>{{ error || submitError }}
     </div>
 
-    <ChatInput :disabled="isStreaming" @send="sendMessage" />
+    <div v-if="submitResult" class="result-bar">
+      <div class="result-header">
+        <span class="result-tag">soumis</span>
+        <a :href="submitResult.epic.web_url" target="_blank" class="result-epic-link">
+          Epic #{{ submitResult.epic.iid }} — {{ submitResult.epic.title }}
+        </a>
+      </div>
+      <ul class="result-issues">
+        <li v-for="issue in submitResult.issues" :key="issue.iid">
+          <a :href="issue.web_url" target="_blank">#{{ issue.iid }} {{ issue.title }}</a>
+        </li>
+      </ul>
+    </div>
+
+    <ChatInput :disabled="isStreaming || isSubmitting" @send="sendMessage" />
   </div>
 </template>
 
@@ -311,5 +372,71 @@ async function sendMessage(text: string) {
   padding: 0.1rem 0.35rem;
   border-radius: 2px;
   flex-shrink: 0;
+}
+
+/* ── Result bar ─────────────────────────────────────────────── */
+
+.result-bar {
+  flex-shrink: 0;
+  padding: 0.75rem 1.5rem;
+  border-top: 1px solid var(--border);
+  background: color-mix(in srgb, var(--hi) 6%, var(--surface));
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.result-header {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.result-tag {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, var(--hi) 50%, transparent);
+  color: var(--hi);
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.result-epic-link {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--hi);
+  text-decoration: none;
+}
+
+.result-epic-link:hover {
+  text-decoration: underline;
+}
+
+.result-issues {
+  margin: 0;
+  padding-left: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.result-issues li {
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  color: var(--txt-2);
+}
+
+.result-issues a {
+  color: var(--txt-2);
+  text-decoration: none;
+}
+
+.result-issues a:hover {
+  color: var(--hi);
+  text-decoration: underline;
 }
 </style>

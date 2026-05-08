@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { mount } from '@vue/test-utils'
 import ChatThread from './ChatThread.vue'
+import ChatMessage from './ChatMessage.vue'
 
 const messages = [
   { role: 'user' as const, content: 'hello' },
@@ -28,5 +29,24 @@ describe('ChatThread', () => {
   it('hides typing indicator when streaming but last message has content', () => {
     const w = mount(ChatThread, { props: { messages, isStreaming: true } })
     expect(w.find('.streaming-cursor').exists()).toBe(false)
+  })
+
+  it('shows submit buttons when canSubmit=true and a message has [FOR_VALIDATION]', () => {
+    const msgs = [{ role: 'assistant' as const, content: 'Reformulation [FOR_VALIDATION]' }]
+    const w = mount(ChatThread, { props: { messages: msgs, isStreaming: false, canSubmit: true, isSubmitting: false } })
+    expect(w.findAll('.msg-submit-btn').length).toBe(2)
+  })
+
+  it('hides submit buttons when canSubmit=false', () => {
+    const msgs = [{ role: 'assistant' as const, content: 'Reformulation [FOR_VALIDATION]' }]
+    const w = mount(ChatThread, { props: { messages: msgs, isStreaming: false, canSubmit: false } })
+    expect(w.find('.msg-submit-btn').exists()).toBe(false)
+  })
+
+  it('forwards submit event from ChatMessage to parent', async () => {
+    const msgs = [{ role: 'assistant' as const, content: 'Reformulation [FOR_VALIDATION]' }]
+    const w = mount(ChatThread, { props: { messages: msgs, isStreaming: false, canSubmit: true, isSubmitting: false } })
+    await w.findComponent(ChatMessage).vm.$emit('submit')
+    expect(w.emitted('submit')).toBeTruthy()
   })
 })

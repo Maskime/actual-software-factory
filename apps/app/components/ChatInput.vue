@@ -92,7 +92,7 @@ function submit() {
 
 .prompt-shell:focus-within {
   border-color: var(--hi);
-  box-shadow: 0 0 0 2px rgba(51, 65, 85, 0.12);
+  box-shadow: 0 0 0 2px rgba(77, 158, 255, 0.15);
 }
 
 .prompt-shell--disabled {

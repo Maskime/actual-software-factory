@@ -1,10 +1,14 @@
 <script setup lang="ts">
 import ChatMessage from './ChatMessage.vue'
 
-defineProps<{
+withDefaults(defineProps<{
   messages: Array<{ role: 'user' | 'assistant'; content: string }>
   isStreaming: boolean
-}>()
+  canSubmit?: boolean
+  isSubmitting?: boolean
+}>(), { canSubmit: false, isSubmitting: false })
+
+const emit = defineEmits<{ submit: [] }>()
 </script>
 
 <template>
@@ -14,6 +18,9 @@ defineProps<{
       :key="i"
       :role="msg.role"
       :content="msg.content"
+      :show-submit="canSubmit"
+      :is-submitting="isSubmitting"
+      @submit="emit('submit')"
     />
 
     <!-- Streaming: last assistant message still empty -->

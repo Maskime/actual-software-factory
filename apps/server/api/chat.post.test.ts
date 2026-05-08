@@ -23,6 +23,16 @@ vi.mock('@anthropic-ai/sdk', () => {
     return { [Symbol.asyncIterator]: gen }
   }
 
+  const makeToolStream = (toolInput: Record<string, string>) => {
+    const json = JSON.stringify(toolInput)
+    async function* gen() {
+      yield { type: 'content_block_start', content_block: { type: 'tool_use', name: 'propose_reformulation' } }
+      yield { type: 'content_block_delta', delta: { type: 'input_json_delta', partial_json: json } }
+      yield { type: 'content_block_stop' }
+    }
+    return { [Symbol.asyncIterator]: gen }
+  }
+
   const APIError = class extends Error {
     constructor(message: string) { super(message) }
   }
@@ -33,6 +43,7 @@ vi.mock('@anthropic-ai/sdk', () => {
     },
   }))
   ;(Anthropic as any).APIError = APIError
+  ;(Anthropic as any).makeToolStream = makeToolStream
 
   return { default: Anthropic }
 })
@@ -198,6 +209,97 @@ describe('chat.post handler', () => {
     const errorChunk = chunks.find(c => c.includes('[ERROR]'))
     expect(errorChunk).toBeDefined()
     expect(errorChunk).toContain('rate limit exceeded')
+  })
+})
+
+describe('chat.post — propose_reformulation tool call', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('useRuntimeConfig', vi.fn().mockReturnValue(mockConfig))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it('passes propose_epic tool to the Anthropic stream call', async () => {
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'hi' }] })
+
+    const MockAnthropic = Anthropic as unknown as ReturnType<typeof vi.fn>
+    const streamSpy = vi.fn().mockReturnValue({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }
+      },
+    })
+    MockAnthropic.mockImplementation(() => ({ messages: { stream: streamSpy } }))
+    vi.mocked(h3.sendStream).mockResolvedValue(undefined)
+
+    await (handler as Function)(mockEvent)
+
+    const callArg = streamSpy.mock.calls[0][0]
+    expect(callArg.tools).toBeDefined()
+    expect(callArg.tools[0].name).toBe('propose_epic')
+  })
+
+  it('renders propose_epic tool call as Markdown with [FOR_VALIDATION] and emits __epic_data', async () => {
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'hi' }] })
+
+    const toolInput = {
+      epic_title: 'Mon epic',
+      epic_description: 'Description complète',
+      user_stories: [
+        { title: 'US-01', description: 'En tant que...', acceptance_criteria: ['AC1'] },
+      ],
+    }
+    const MockAnthropic = Anthropic as unknown as ReturnType<typeof vi.fn>
+    MockAnthropic.mockImplementation(() => ({
+      messages: {
+        stream: vi.fn().mockReturnValue((Anthropic as any).makeToolStream(toolInput)),
+      },
+    }))
+
+    const chunks: string[] = []
+    vi.mocked(h3.sendStream).mockImplementation((_ev, stream: ReadableStream) => {
+      return drainStream(stream).then(c => { chunks.push(...c) }) as unknown as ReturnType<typeof h3.sendStream>
+    })
+
+    await (handler as Function)(mockEvent)
+
+    const joined = chunks.join('')
+    expect(joined).toContain('__epic_data')
+    expect(joined).toContain('Mon epic')
+    expect(joined).toContain('## Epic :')
+    expect(joined).toContain('[FOR_VALIDATION]')
+    expect(joined).toContain('data: [DONE]')
+  })
+
+  it('still streams text deltas normally alongside tool calls', async () => {
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'hi' }] })
+
+    const MockAnthropic = Anthropic as unknown as ReturnType<typeof vi.fn>
+    MockAnthropic.mockImplementation(() => ({
+      messages: {
+        stream: vi.fn().mockReturnValue({
+          [Symbol.asyncIterator]: async function* () {
+            yield { type: 'content_block_start', content_block: { type: 'text' } }
+            yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Parfait, ' } }
+            yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'voici ma proposition.' } }
+            yield { type: 'content_block_stop' }
+          },
+        }),
+      },
+    }))
+
+    const chunks: string[] = []
+    vi.mocked(h3.sendStream).mockImplementation((_ev, stream: ReadableStream) => {
+      return drainStream(stream).then(c => { chunks.push(...c) }) as unknown as ReturnType<typeof h3.sendStream>
+    })
+
+    await (handler as Function)(mockEvent)
+
+    expect(chunks).toContainEqual('data: "Parfait, "\n\n')
+    expect(chunks).toContainEqual('data: "voici ma proposition."\n\n')
   })
 })
 
