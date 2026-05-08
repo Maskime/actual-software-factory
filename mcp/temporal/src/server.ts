@@ -8,6 +8,7 @@ import {
   listWorkflowsSchema,
   handleListWorkflows,
 } from "./tools/workflows.js";
+import { triggerPipelineSchema, handleTriggerPipeline } from "./tools/trigger.js";
 
 export function buildMcpServer(tc: TemporalClient): McpServer {
   const server = new McpServer({
@@ -34,6 +35,13 @@ export function buildMcpServer(tc: TemporalClient): McpServer {
     "List workflow executions in the configured Temporal namespace. Supports filtering by execution status and workflow type. Returns up to page_size results (default 20, max 100).",
     listWorkflowsSchema.shape,
     (params) => handleListWorkflows(tc, params)
+  );
+
+  server.tool(
+    "temporal_trigger_pipeline",
+    "Start a factory pipeline workflow for a GitLab issue. Derives the workflowId from the issue IID (pipeline-issue-{iid}) to guarantee uniqueness. Idempotent: a second call for the same issue returns started: false with status already_running instead of creating a duplicate.",
+    triggerPipelineSchema.shape,
+    (params) => handleTriggerPipeline(tc, params)
   );
 
   return server;
