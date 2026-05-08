@@ -40,6 +40,10 @@ const PROPOSE_EPIC_TOOL: Anthropic.Tool = {
               items: { type: 'string' },
               description: "Liste des critères d'acceptance",
             },
+            technical_notes: {
+              type: 'string',
+              description: "Notes techniques pour les développeurs (contraintes, choix d'architecture, etc.)",
+            },
           },
           required: ['title', 'description', 'acceptance_criteria'],
         },
@@ -107,7 +111,10 @@ function renderEpic(input: EpicData): string {
     const criteriaLines = us.acceptance_criteria.length > 0
       ? ["**Critères d'acceptance :**", ...us.acceptance_criteria.map(c => `- ${c}`), '']
       : []
-    return [`#### US-${num} — ${us.title}`, '', us.description, '', ...criteriaLines]
+    const notesLines = us.technical_notes
+      ? ['**Notes techniques :**', us.technical_notes, '']
+      : []
+    return [`#### US-${num} — ${us.title}`, '', us.description, '', ...criteriaLines, ...notesLines]
   })
 
   return [...lines, ...usLines, '[FOR_VALIDATION]'].join('\n')

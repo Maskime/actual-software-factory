@@ -2,6 +2,7 @@ export interface UserStoryData {
   title: string
   description: string
   acceptance_criteria: string[]
+  technical_notes?: string
 }
 
 export interface EpicData {
