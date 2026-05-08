@@ -22,6 +22,8 @@ const WORKFLOW_ENV_DEFAULTS: Record<string, string> = {
   AGENT_ACTIVITY_MAX_ATTEMPTS:               '3',
   AGENT_ACTIVITY_INITIAL_INTERVAL:           '30s',
   AGENT_ACTIVITY_BACKOFF_COEFFICIENT:        '2',
+  HUMAN_IN_THE_LOOP:                         'false',
+  HUMAN_IN_THE_LOOP_TIMEOUT:                 '24 hours',
 };
 
 const workflowDefines = Object.fromEntries(

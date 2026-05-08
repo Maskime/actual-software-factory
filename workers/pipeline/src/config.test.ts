@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { gitlabActivityOptions, agentActivityOptions } from './config.js'
+import { gitlabActivityOptions, agentActivityOptions, humanInTheLoopConfig } from './config.js'
 
 const GITLAB_KEYS = [
   'GITLAB_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT',
@@ -17,8 +17,10 @@ const AGENT_KEYS = [
   'AGENT_ACTIVITY_BACKOFF_COEFFICIENT',
 ] as const
 
+const HITL_KEYS = ['HUMAN_IN_THE_LOOP', 'HUMAN_IN_THE_LOOP_TIMEOUT'] as const
+
 function clearEnv() {
-  for (const k of [...GITLAB_KEYS, ...AGENT_KEYS]) delete process.env[k]
+  for (const k of [...GITLAB_KEYS, ...AGENT_KEYS, ...HITL_KEYS]) delete process.env[k]
 }
 
 describe('gitlabActivityOptions', () => {
@@ -93,5 +95,33 @@ describe('agentActivityOptions', () => {
   it('overrides maximumAttempts via env var', () => {
     process.env.AGENT_ACTIVITY_MAX_ATTEMPTS = '5'
     expect(agentActivityOptions().retry?.maximumAttempts).toBe(5)
+  })
+})
+
+describe('humanInTheLoopConfig', () => {
+  beforeEach(clearEnv)
+  afterEach(clearEnv)
+
+  it('returns enabled=false by default', () => {
+    expect(humanInTheLoopConfig().enabled).toBe(false)
+  })
+
+  it('returns timeout of 24 hours by default', () => {
+    expect(humanInTheLoopConfig().timeout).toBe('24 hours')
+  })
+
+  it('returns enabled=true when HUMAN_IN_THE_LOOP=true', () => {
+    process.env.HUMAN_IN_THE_LOOP = 'true'
+    expect(humanInTheLoopConfig().enabled).toBe(true)
+  })
+
+  it('returns enabled=false when HUMAN_IN_THE_LOOP=false', () => {
+    process.env.HUMAN_IN_THE_LOOP = 'false'
+    expect(humanInTheLoopConfig().enabled).toBe(false)
+  })
+
+  it('overrides timeout via env var', () => {
+    process.env.HUMAN_IN_THE_LOOP_TIMEOUT = '1 hour'
+    expect(humanInTheLoopConfig().timeout).toBe('1 hour')
   })
 })

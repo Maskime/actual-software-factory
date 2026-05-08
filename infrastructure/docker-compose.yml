@@ -264,6 +264,8 @@ services:
       TEMPORAL_TASK_QUEUE: "factory-pipeline"
       GITLAB_API_URL: "http://gitlab/api/v4"
       GITLAB_API_TOKEN: "${GITLAB_API_TOKEN}"
+      HUMAN_IN_THE_LOOP: "${HUMAN_IN_THE_LOOP:-false}"
+      HUMAN_IN_THE_LOOP_TIMEOUT: "${HUMAN_IN_THE_LOOP_TIMEOUT:-24 hours}"
     networks:
       - factory-network
     depends_on:
