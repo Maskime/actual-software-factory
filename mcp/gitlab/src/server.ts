@@ -1,6 +1,7 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { type GitLabClient } from "./gitlab-client.js";
 import { checkAuthSchema, handleCheckAuth } from "./tools/health.js";
+import { createEpicSchema, handleCreateEpic } from "./tools/epics.js";
 import {
   getIssueSchema,
   handleGetIssue,
@@ -64,6 +65,13 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     name: "mcp-gitlab",
     version: "0.1.0",
   });
+
+  server.tool(
+    "gitlab_create_epic",
+    "Create a GitLab epic as an issue prefixed with [EPIC]. Uses the qualification-interface label by default. Returns the epic IID, global ID, title, and URL.",
+    createEpicSchema.shape,
+    (params) => handleCreateEpic(client, params)
+  );
 
   server.tool(
     "gitlab_check_auth",
