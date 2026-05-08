@@ -13,15 +13,16 @@ const emit = defineEmits<{ submit: [] }>()
 
 <template>
   <div class="thread">
-    <ChatMessage
-      v-for="(msg, i) in messages"
-      :key="i"
-      :role="msg.role"
-      :content="msg.content"
-      :show-submit="canSubmit"
-      :is-submitting="isSubmitting"
-      @submit="emit('submit')"
-    />
+    <template v-for="(msg, i) in messages" :key="i">
+      <ChatMessage
+        v-if="msg.content !== '' || !isStreaming || i !== messages.length - 1"
+        :role="msg.role"
+        :content="msg.content"
+        :show-submit="canSubmit"
+        :is-submitting="isSubmitting"
+        @submit="emit('submit')"
+      />
+    </template>
 
     <!-- Streaming: last assistant message still empty -->
     <div
