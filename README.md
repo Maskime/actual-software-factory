@@ -215,7 +215,7 @@ Interface conversationnelle permettant de qualifier un besoin et de générer de
 Copier le fichier d'exemple et le remplir :
 
 ```bash
-cp apps/chat/.env.example apps/chat/.env
+cp apps/.env.example apps/.env
 ```
 
 | Variable | Obligatoire | Description |
@@ -231,7 +231,7 @@ cp apps/chat/.env.example apps/chat/.env
 | `NUXT_GITLAB_URL` | Non | URL **publique** de GitLab — utilisée pour la redirection OAuth dans le navigateur (défaut : `http://localhost`) |
 | `NUXT_GITLAB_INTERNAL_URL` | Non | URL **interne** de GitLab — utilisée côté serveur pour l'échange de code et les appels userinfo. En Docker : `http://gitlab`. Si absent, hérite de `NUXT_GITLAB_URL`. |
 
-> **Sécurité :** `apps/chat/.env` est gitignored. Les clés `NUXT_ANTHROPIC_API_KEY`, `NEXTAUTH_SECRET` et les credentials GitLab OAuth ne sont jamais transmis au navigateur — ils sont lus exclusivement côté serveur.
+> **Sécurité :** `apps/.env` est gitignored. Les clés `NUXT_ANTHROPIC_API_KEY`, `NEXTAUTH_SECRET` et les credentials GitLab OAuth ne sont jamais transmis au navigateur — ils sont lus exclusivement côté serveur.
 
 > **Docker — résolution réseau :** Le container `chat` ne peut pas joindre GitLab via `http://localhost` (qui pointe vers le container lui-même). `NUXT_GITLAB_INTERNAL_URL` est positionné à `http://gitlab` directement dans `docker-compose.yml` (bloc `environment` du service `chat`), de sorte que les appels serveur-à-serveur (token + userinfo) passent par `factory-network`. `NUXT_GITLAB_URL` reste à `http://localhost` pour que le navigateur soit redirigé vers la bonne adresse.
 
@@ -258,7 +258,7 @@ Après validation, GitLab affiche l'**Application ID** et le **Secret** — note
 openssl rand -base64 32
 ```
 
-**3. Renseigner les variables dans `apps/chat/.env`**
+**3. Renseigner les variables dans `apps/.env`**
 
 ```env
 NEXTAUTH_SECRET=<résultat de openssl ci-dessus>
@@ -268,7 +268,7 @@ NUXT_GITLAB_CLIENT_SECRET=<Secret>
 NUXT_GITLAB_URL=http://localhost
 ```
 
-`NUXT_GITLAB_INTERNAL_URL` n'est **pas** à mettre dans `apps/chat/.env` — il est défini dans `infrastructure/docker-compose.yml` car il est spécifique à l'environnement Docker. En dev local, cette variable est absente et le serveur utilise `NUXT_GITLAB_URL` pour tous les appels.
+`NUXT_GITLAB_INTERNAL_URL` n'est **pas** à mettre dans `apps/.env` — il est défini dans `infrastructure/docker-compose.yml` car il est spécifique à l'environnement Docker. En dev local, cette variable est absente et le serveur utilise `NUXT_GITLAB_URL` pour tous les appels.
 
 > **Note :** si le portail chat tourne derrière un reverse-proxy ou en production, adapter `NEXTAUTH_URL` à l'URL publique, mettre à jour la Redirect URI de l'application GitLab, et ajuster `NUXT_GITLAB_INTERNAL_URL` si GitLab n'est pas accessible via `http://gitlab`.
 
@@ -278,7 +278,7 @@ NUXT_GITLAB_URL=http://localhost
 # Démarrage dev (hot-reload)
 make dev-chat
 # ou directement :
-npm run dev --workspace=apps/chat
+npm run dev --workspace=apps
 ```
 
 URL par défaut : `http://localhost:3000`
