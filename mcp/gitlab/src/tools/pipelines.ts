@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { type GitLabClient, type ToolResult } from "../gitlab-client.js";
-import { projectPath, errorResponse } from "./issues.js";
+import { projectPath, errorResponse } from "./utils.js";
 
 interface GitLabPipeline {
   id: number;

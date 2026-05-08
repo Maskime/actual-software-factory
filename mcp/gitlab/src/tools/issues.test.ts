@@ -11,6 +11,16 @@ import {
   handleGetIssueComments,
 } from './issues.js'
 
+vi.mock('./uploads.js', () => ({
+  uploadFileRaw: vi.fn().mockResolvedValue({
+    url: '/uploads/abc/file.png',
+    markdown: '![file.png](/uploads/abc/file.png)',
+    full_path: '/root/sf/uploads/abc/file.png',
+  }),
+}))
+
+import { uploadFileRaw } from './uploads.js'
+
 const baseIssue = {
   id: 10, iid: 1, title: 'Bug', description: 'desc', state: 'opened' as const,
   labels: ['bug'], assignees: [], web_url: 'http://gl/issues/1',
@@ -85,6 +95,46 @@ describe('handleCreateIssue()', () => {
     const client = { post: vi.fn().mockRejectedValue(new GitLabApiError('fail', 500, 'GITLAB_API_ERROR')) } as unknown as GitLabClient
     const result = await handleCreateIssue(client, { project_id: '3', title: 'Bug' })
     expect(result.isError).toBe(true)
+  })
+
+  it('uploads attachments and appends markdown snippets to description', async () => {
+    const mockPost = vi.fn().mockResolvedValue(baseIssue)
+    const client = { post: mockPost, postMultipart: vi.fn() } as unknown as GitLabClient
+    await handleCreateIssue(client, {
+      project_id: '3',
+      title: 'Bug with screenshot',
+      description: 'Initial desc',
+      attachments: ['/tmp/shot.png', '/tmp/log.txt'],
+    })
+    expect(uploadFileRaw).toHaveBeenCalledTimes(2)
+    expect(uploadFileRaw).toHaveBeenCalledWith(client, { project_id: '3', file_path: '/tmp/shot.png' })
+    expect(uploadFileRaw).toHaveBeenCalledWith(client, { project_id: '3', file_path: '/tmp/log.txt' })
+    const body = mockPost.mock.calls[0][1] as Record<string, unknown>
+    expect(body.description).toContain('Initial desc')
+    expect(body.description).toContain('![file.png](/uploads/abc/file.png)')
+  })
+
+  it('creates issue without attachments when attachments is undefined', async () => {
+    vi.mocked(uploadFileRaw).mockClear()
+    const mockPost = vi.fn().mockResolvedValue(baseIssue)
+    const client = { post: mockPost } as unknown as GitLabClient
+    await handleCreateIssue(client, { project_id: '3', title: 'Bug' })
+    expect(uploadFileRaw).not.toHaveBeenCalled()
+    const body = mockPost.mock.calls[0][1] as Record<string, unknown>
+    expect(body.description).toBeUndefined()
+  })
+
+  it('sets description from attachment markdown when no initial description is provided', async () => {
+    vi.mocked(uploadFileRaw).mockClear()
+    const mockPost = vi.fn().mockResolvedValue(baseIssue)
+    const client = { post: mockPost, postMultipart: vi.fn() } as unknown as GitLabClient
+    await handleCreateIssue(client, {
+      project_id: '3',
+      title: 'Bug',
+      attachments: ['/tmp/shot.png'],
+    })
+    const body = mockPost.mock.calls[0][1] as Record<string, unknown>
+    expect(body.description).toBe('![file.png](/uploads/abc/file.png)')
   })
 })
 

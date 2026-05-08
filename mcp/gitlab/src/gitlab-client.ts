@@ -135,6 +135,17 @@ export class GitLabClient {
     }
   }
 
+  async postMultipart<T>(path: string, formData: FormData): Promise<T> {
+    try {
+      const { data } = await this.http.post<T>(path, formData, {
+        headers: { "Content-Type": undefined },
+      });
+      return data;
+    } catch (err) {
+      throw this.wrapError(err as AxiosError, path);
+    }
+  }
+
   async delete<T>(path: string): Promise<T> {
     try {
       const { data } = await this.http.delete<T>(path);

@@ -1,9 +1,8 @@
 import { vi, describe, it, expect, beforeEach } from 'vitest'
 import { GitLabApiError } from '../gitlab-client.js'
 import type { GitLabClient } from '../gitlab-client.js'
+import { projectPath, errorResponse } from './utils.js'
 import {
-  projectPath,
-  errorResponse,
   handleCreateMr,
   handleGetMr,
   handleGetMrDiff,

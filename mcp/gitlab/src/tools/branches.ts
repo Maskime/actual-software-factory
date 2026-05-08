@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { type GitLabClient, type ToolResult, GitLabApiError } from "../gitlab-client.js";
+import { projectPath, errorResponse } from "./utils.js";
 
 interface GitLabBranch {
   name: string;
@@ -30,35 +31,6 @@ interface GitLabTreeEntry {
   type: "blob" | "tree";
   path: string;
   mode: string;
-}
-
-export function projectPath(projectId: string): string {
-  return `/projects/${encodeURIComponent(projectId)}`;
-}
-
-export function errorResponse(err: unknown) {
-  if (err instanceof GitLabApiError) {
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({
-            error: {
-              code: err.code,
-              statusCode: err.statusCode,
-              message: err.message,
-            },
-          }),
-        },
-      ],
-      isError: true as const,
-    };
-  }
-  const message = err instanceof Error ? err.message : String(err);
-  return {
-    content: [{ type: "text" as const, text: message }],
-    isError: true as const,
-  };
 }
 
 // gitlab_create_branch
