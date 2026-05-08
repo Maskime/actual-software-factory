@@ -18,7 +18,13 @@ Et arrête-toi.
 
 ---
 
-## Étape 2 — Vérification du ticket sur GitLab
+## Étape 2 — Renommage de la session
+
+Utilise le Skill `rename` avec l'argument `Implementing #$ARGUMENTS` pour renommer la session courante.
+
+---
+
+## Étape 3 — Vérification du ticket sur GitLab
 
 Utilise l'outil `mcp__gitlab__gitlab_get_issue` avec :
 - `project_id` : `3` (projet "Software Factory")
@@ -36,7 +42,7 @@ Mémorise pour la suite : `TITRE`, `DESCRIPTION`, `LABELS`, `STATUT`, `AUTEUR`.
 
 ---
 
-## Étape 3 — Gestion de la branche courante
+## Étape 4 — Gestion de la branche courante
 
 Vérifie la branche courante avec `git branch --show-current`.
 
@@ -57,7 +63,7 @@ git rebase origin/main
 
 ---
 
-## Étape 4 — Création de la branche de travail
+## Étape 5 — Création de la branche de travail
 
 ```bash
 git checkout -b feature/$ARGUMENTS
@@ -65,7 +71,7 @@ git checkout -b feature/$ARGUMENTS
 
 ---
 
-## Étape 5 — Affichage du ticket
+## Étape 6 — Affichage du ticket
 
 Affiche un résumé clair du ticket :
 
@@ -80,7 +86,7 @@ Auteur  : <AUTEUR>
 
 ---
 
-## Étape 6 — Phase Plan
+## Étape 7 — Phase Plan
 
 Utilise `EnterPlanMode`.
 
@@ -91,7 +97,7 @@ Analyse les informations du ticket, explore les fichiers du dépôt concernés e
 
 ---
 
-## Étape 7 — Review du plan par sous-agent
+## Étape 8 — Review du plan par sous-agent
 
 Délègue la review via l'outil `Agent` (subagent_type: `Plan`) en lui transmettant :
 - Le contenu complet du plan
@@ -105,7 +111,7 @@ Consigne au sous-agent : classifier chaque point de feedback selon l'un des troi
 
 ---
 
-## Étape 8 — Traitement des feedbacks
+## Étape 9 — Traitement des feedbacks
 
 Pour chaque feedback du sous-agent :
 
@@ -118,26 +124,26 @@ Pour chaque feedback du sous-agent :
 
 ---
 
-## Étape 9 — Validation du plan
+## Étape 10 — Validation du plan
 
 Utilise `ExitPlanMode` pour soumettre le plan révisé à validation utilisateur.
 
 ---
 
-## Étape 10 — Implémentation
+## Étape 11 — Implémentation
 
 Exécute le plan validé : crée et modifie les fichiers, lance les tests et le lint au fur et à mesure.
 
 ---
 
-## Étape 11 — Vérification
+## Étape 12 — Vérification
 
 - Lance le lint approprié au scope modifié (ex : `tsc --strict` pour du TypeScript)
 - Vérifie chaque exigence du ticket : **satisfait** ou **non satisfait**
 
 ---
 
-## Étape 12 — Commit & Push
+## Étape 13 — Commit & Push
 
 Committe tous les fichiers modifiés et pousse la branche :
 
@@ -151,7 +157,7 @@ Le message de commit doit refléter le titre du ticket. Le scope est le module p
 
 ---
 
-## Étape 13 — Création de la Merge Request
+## Étape 14 — Création de la Merge Request
 
 Utilise l'outil `mcp__gitlab__gitlab_create_mr` avec :
 - `project_id` : `3`
@@ -182,7 +188,7 @@ Affiche l'URL de la MR créée.
 
 ---
 
-## Étape 14 — Résumé final
+## Étape 15 — Résumé final
 
 Affiche :
 
