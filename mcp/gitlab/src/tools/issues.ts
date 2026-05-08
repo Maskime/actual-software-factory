@@ -1,5 +1,7 @@
 import { z } from "zod";
-import { type GitLabClient, type ToolResult, GitLabApiError } from "../gitlab-client.js";
+import { type GitLabClient, type ToolResult } from "../gitlab-client.js";
+import { projectPath, errorResponse } from "./utils.js";
+import { uploadFileRaw } from "./uploads.js";
 
 interface GitLabIssue {
   id: number;
@@ -10,35 +12,6 @@ interface GitLabIssue {
   labels: string[];
   assignees: Array<{ id: number; username: string; name: string }>;
   web_url: string;
-}
-
-export function projectPath(projectId: string): string {
-  return `/projects/${encodeURIComponent(projectId)}`;
-}
-
-export function errorResponse(err: unknown) {
-  if (err instanceof GitLabApiError) {
-    return {
-      content: [
-        {
-          type: "text" as const,
-          text: JSON.stringify({
-            error: {
-              code: err.code,
-              statusCode: err.statusCode,
-              message: err.message,
-            },
-          }),
-        },
-      ],
-      isError: true as const,
-    };
-  }
-  const message = err instanceof Error ? err.message : String(err);
-  return {
-    content: [{ type: "text" as const, text: message }],
-    isError: true as const,
-  };
 }
 
 // gitlab_get_issue
@@ -150,6 +123,12 @@ export const createIssueSchema = z.object({
     .string()
     .optional()
     .describe("Comma-separated list of label names to apply"),
+  attachments: z
+    .array(z.string())
+    .optional()
+    .describe(
+      "Local file paths to attach (uploaded via GitLab and appended to the description as Markdown)"
+    ),
 });
 
 export async function handleCreateIssue(
@@ -157,8 +136,22 @@ export async function handleCreateIssue(
   params: z.infer<typeof createIssueSchema>
 ): Promise<ToolResult> {
   try {
+    let description = params.description;
+
+    if (params.attachments && params.attachments.length > 0) {
+      const snippets = await Promise.all(
+        params.attachments.map((file_path) =>
+          uploadFileRaw(client, { project_id: params.project_id, file_path })
+        )
+      );
+      const attachmentMarkdown = snippets.map((s) => s.markdown).join("\n");
+      description = description
+        ? `${description}\n\n${attachmentMarkdown}`
+        : attachmentMarkdown;
+    }
+
     const body: Record<string, unknown> = { title: params.title };
-    if (params.description !== undefined) body.description = params.description;
+    if (description !== undefined) body.description = description;
     if (params.labels !== undefined) body.labels = params.labels;
 
     const issue = await client.post<GitLabIssue>(

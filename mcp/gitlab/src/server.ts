@@ -17,6 +17,7 @@ import {
   getIssueCommentsSchema,
   handleGetIssueComments,
 } from "./tools/issues.js";
+import { uploadFileSchema, handleUploadFile } from "./tools/uploads.js";
 import {
   createMrSchema,
   handleCreateMr,
@@ -118,6 +119,15 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     "Get the comments (human notes) of a GitLab issue. System notes are excluded by default. Returns id, author username, body, and created_at for each comment. Limited to 100 comments per call.",
     getIssueCommentsSchema.shape,
     (params) => handleGetIssueComments(client, params)
+  );
+
+  server.tool(
+    "gitlab_upload_file",
+    "Upload a file to a GitLab project and return its URL and Markdown-ready snippet. " +
+      "Accepts either a local file path (file_path) or base64-encoded content (file_content_base64 + filename). " +
+      "The returned markdown can be embedded in any GitLab Markdown field: issue description, comment, wiki page.",
+    uploadFileSchema.shape,
+    (params) => handleUploadFile(client, params)
   );
 
   server.tool(
