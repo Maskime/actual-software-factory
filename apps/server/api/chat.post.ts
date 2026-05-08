@@ -61,19 +61,15 @@ function renderEpic(input: EpicData): string {
     '',
   ]
 
-  input.user_stories.forEach((us, i) => {
+  const usLines = input.user_stories.flatMap((us, i) => {
     const num = String(i + 1).padStart(2, '0')
-    lines.push(`#### US-${num} — ${us.title}`, '')
-    lines.push(us.description, '')
-    if (us.acceptance_criteria.length > 0) {
-      lines.push("**Critères d'acceptance :**")
-      us.acceptance_criteria.forEach(c => lines.push(`- ${c}`))
-      lines.push('')
-    }
+    const criteriaLines = us.acceptance_criteria.length > 0
+      ? ["**Critères d'acceptance :**", ...us.acceptance_criteria.map(c => `- ${c}`), '']
+      : []
+    return [`#### US-${num} — ${us.title}`, '', us.description, '', ...criteriaLines]
   })
 
-  lines.push('[FOR_VALIDATION]')
-  return lines.join('\n')
+  return [...lines, ...usLines, '[FOR_VALIDATION]'].join('\n')
 }
 
 async function fetchGitLabFileRaw(

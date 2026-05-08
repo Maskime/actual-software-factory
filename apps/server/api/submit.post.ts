@@ -43,9 +43,8 @@ export default defineEventHandler(async (event) => {
   const createdIssues: Array<{ iid: number; title: string; web_url: string }> = []
 
   for (const us of epicData.user_stories) {
-    const criteriaBlock = us.acceptance_criteria.length > 0
-      ? `\n\n## Critères d'acceptance\n\n${us.acceptance_criteria.map(c => `- ${c}`).join('\n')}`
-      : ''
+    const criteriaLines = us.acceptance_criteria.map(c => `- ${c}`).join('\n')
+    const criteriaBlock = criteriaLines ? `\n\n## Critères d'acceptance\n\n${criteriaLines}` : ''
 
     const issueRes = await fetch(`${baseUrl}/api/v4/projects/${projectId}/issues`, {
       method: 'POST',
