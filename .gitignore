@@ -27,4 +27,6 @@ secrets/
 **/dist
 
 **/coverage
-visual_feedback/*
+visual_feedback/*png*
+
+.claude/worktrees
