@@ -25,6 +25,7 @@ test:
   script:
     - npm ci
     - npm run test:coverage -w @factory/mcp-gitlab
+    - npm run test:coverage -w @factory/mcp-temporal
     - npm run test:coverage -w @factory/worker-pipeline
     - npx nuxi prepare --cwd apps
     - npm run test:coverage -w @factory/portal
@@ -32,6 +33,7 @@ test:
     when: always
     paths:
       - mcp/gitlab/coverage/
+      - mcp/temporal/coverage/
       - workers/pipeline/coverage/
       - apps/coverage/
     expire_in: 1 day

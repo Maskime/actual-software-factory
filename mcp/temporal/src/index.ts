@@ -2,6 +2,7 @@ import { createMcpExpressApp } from "@modelcontextprotocol/sdk/server/express.js
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import { TemporalClient, TemporalConnectionError } from "./temporal-client.js";
 import { buildMcpServer } from "./server.js";
+import { triggerPipelineSchema, handleTriggerPipeline } from "./tools/trigger.js";
 
 const PORT = parseInt(process.env.PORT ?? "3000", 10);
 
@@ -63,6 +64,23 @@ async function main(): Promise<void> {
       error: { code: -32000, message: "Method not allowed." },
       id: null,
     });
+  });
+
+  app.post("/trigger", async (req, res) => {
+    const parsed = triggerPipelineSchema.safeParse(req.body);
+    if (!parsed.success) {
+      res.status(400).json({ error: { code: "INVALID_INPUT", message: parsed.error.message } });
+      return;
+    }
+    const result = await handleTriggerPipeline(tc, parsed.data);
+    const data = JSON.parse(result.content[0].text) as Record<string, unknown>;
+    if ("error" in data) {
+      res.status(500).json(data);
+    } else if (data.started === false) {
+      res.status(200).json(data);
+    } else {
+      res.status(201).json(data);
+    }
   });
 
   process.on("SIGINT", () => process.exit(0));
