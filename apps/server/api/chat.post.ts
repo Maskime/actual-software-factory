@@ -44,8 +44,16 @@ const PROPOSE_EPIC_TOOL: Anthropic.Tool = {
               type: 'string',
               description: "Notes techniques pour les développeurs (contraintes, choix d'architecture, etc.)",
             },
+            context: {
+              type: 'string',
+              description: "Pourquoi cette user story existe — contexte métier ou technique",
+            },
+            technical_constraints: {
+              type: 'string',
+              description: "Contraintes de stack imposées, le cas échéant",
+            },
           },
-          required: ['title', 'description', 'acceptance_criteria'],
+          required: ['title', 'description', 'acceptance_criteria', 'context'],
         },
       },
     },
