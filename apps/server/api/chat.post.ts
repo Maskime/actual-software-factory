@@ -2,6 +2,7 @@ import { defineEventHandler, readBody, setResponseHeader, sendStream, createErro
 import Anthropic from '@anthropic-ai/sdk'
 import { getToken } from '#auth'
 import { QUALIFICATION_PROMPT } from '../prompts/qualification'
+import type { EpicData } from '../../app/utils/sseParser'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -11,6 +12,69 @@ interface ChatMessage {
 const DEFAULT_MODEL = 'claude-sonnet-4-6'
 const MAX_FILE_CHARS = 50_000
 const GITLAB_FETCH_TIMEOUT_MS = 3_000
+
+const PROPOSE_EPIC_TOOL: Anthropic.Tool = {
+  name: 'propose_epic',
+  description: "Propose un epic GitLab avec ses user stories pour validation par l'utilisateur. Appelle cet outil dès que tu as suffisamment d'informations sur les 4 dimensions. Si l'utilisateur demande des corrections, rappelle-le avec les éléments corrigés.",
+  input_schema: {
+    type: 'object',
+    properties: {
+      epic_title: {
+        type: 'string',
+        description: "Titre court et descriptif de l'epic",
+      },
+      epic_description: {
+        type: 'string',
+        description: 'Description complète du besoin : contexte, objectif, contraintes techniques et critères de done',
+      },
+      user_stories: {
+        type: 'array',
+        description: '2 à 8 user stories couvrant le périmètre de l\'epic',
+        items: {
+          type: 'object',
+          properties: {
+            title: { type: 'string', description: 'Titre court de la user story' },
+            description: { type: 'string', description: 'Format : "En tant que [rôle], je veux [action] afin de [bénéfice]"' },
+            acceptance_criteria: {
+              type: 'array',
+              items: { type: 'string' },
+              description: "Liste des critères d'acceptance",
+            },
+          },
+          required: ['title', 'description', 'acceptance_criteria'],
+        },
+      },
+    },
+    required: ['epic_title', 'epic_description', 'user_stories'],
+  },
+}
+
+function renderEpic(input: EpicData): string {
+  const lines: string[] = [
+    `## Epic : ${input.epic_title}`,
+    '',
+    input.epic_description,
+    '',
+    '---',
+    '',
+    '### User Stories',
+    '',
+  ]
+
+  input.user_stories.forEach((us, i) => {
+    const num = String(i + 1).padStart(2, '0')
+    lines.push(`#### US-${num} — ${us.title}`, '')
+    lines.push(us.description, '')
+    if (us.acceptance_criteria.length > 0) {
+      lines.push("**Critères d'acceptance :**")
+      us.acceptance_criteria.forEach(c => lines.push(`- ${c}`))
+      lines.push('')
+    }
+  })
+
+  lines.push('[FOR_VALIDATION]')
+  return lines.join('\n')
+}
 
 async function fetchGitLabFileRaw(
   baseUrl: string,
@@ -30,7 +94,6 @@ async function fetchGitLabFileRaw(
     const text = await res.text()
     return text.length > MAX_FILE_CHARS ? text.slice(0, MAX_FILE_CHARS) : text
   } catch {
-    // network error, timeout, or 4xx — degrade silently
     return null
   } finally {
     clearTimeout(timer)
@@ -42,7 +105,6 @@ async function buildProjectContext(
   projectId: number,
   config: ReturnType<typeof useRuntimeConfig>,
 ): Promise<string | null> {
-  // The user's OAuth token is the authorization gate: GitLab returns 403 for inaccessible projects.
   const tokenData = await getToken({ event })
   if (!tokenData?.accessToken) return null
 
@@ -57,12 +119,8 @@ async function buildProjectContext(
   if (!readme && !claudeMd) return null
 
   const parts: string[] = ['## Contexte du projet']
-  if (readme) {
-    parts.push('### README.md', readme)
-  }
-  if (claudeMd) {
-    parts.push('### CLAUDE.md', claudeMd)
-  }
+  if (readme) parts.push('### README.md', readme)
+  if (claudeMd) parts.push('### CLAUDE.md', claudeMd)
   return parts.join('\n\n')
 }
 
@@ -110,15 +168,38 @@ export default defineEventHandler(async (event) => {
           model,
           max_tokens: 4096,
           system: systemBlocks,
+          tools: [PROPOSE_EPIC_TOOL],
           messages: body.messages!,
         })
 
+        let currentBlockType: string | null = null
+        let toolInputJson = ''
+
         for await (const chunk of anthropicStream) {
-          if (
-            chunk.type === 'content_block_delta' &&
-            chunk.delta.type === 'text_delta'
-          ) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk.delta.text)}\n\n`))
+          if (chunk.type === 'content_block_start') {
+            currentBlockType = chunk.content_block.type
+            if (chunk.content_block.type === 'tool_use') {
+              toolInputJson = ''
+            }
+          } else if (chunk.type === 'content_block_delta') {
+            if (chunk.delta.type === 'text_delta') {
+              controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk.delta.text)}\n\n`))
+            } else if (chunk.delta.type === 'input_json_delta') {
+              toolInputJson += chunk.delta.partial_json
+            }
+          } else if (chunk.type === 'content_block_stop') {
+            if (currentBlockType === 'tool_use') {
+              try {
+                const epicData = JSON.parse(toolInputJson) as EpicData
+                // Send structured data for the client to store (used at submit time)
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify({ __epic_data: epicData })}\n\n`))
+                // Send rendered Markdown with [FOR_VALIDATION] tag for display
+                controller.enqueue(encoder.encode(`data: ${JSON.stringify(renderEpic(epicData))}\n\n`))
+              } catch {
+                // malformed JSON — skip
+              }
+            }
+            currentBlockType = null
           }
         }
 

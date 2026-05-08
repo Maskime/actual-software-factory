@@ -157,3 +157,67 @@ describe('ProjectDashboard — sendMessage()', () => {
     expect(w.find('.err-bar').exists()).toBe(true)
   })
 })
+
+describe('ProjectDashboard — [FOR_VALIDATION] submit button', () => {
+  beforeEach(() => {
+    stubProjects()
+  })
+
+  it('shows submit button inside message bubble when response contains [FOR_VALIDATION]', async () => {
+    mockFetchOk(['data: "## Reformulation du besoin\\n\\n[FOR_VALIDATION]"', 'data: [DONE]'])
+    const w = mountPage()
+    await flushPromises()
+
+    await sendMessage(w)
+
+    expect(w.find('.msg-submit-btn').exists()).toBe(true)
+  })
+
+  it('does not show submit button when response has no [FOR_VALIDATION]', async () => {
+    mockFetchOk(['data: "réponse normale"', 'data: [DONE]'])
+    const w = mountPage()
+    await flushPromises()
+
+    await sendMessage(w)
+
+    expect(w.find('.msg-submit-btn').exists()).toBe(false)
+  })
+
+  it('hides submit button during streaming', async () => {
+    mockFetchOk(['data: "[FOR_VALIDATION]"', 'data: [DONE]'])
+    const w = mountPage()
+    await flushPromises()
+
+    await w.find('textarea').setValue('test')
+    await w.find('button[aria-label="Envoyer"]').trigger('click')
+
+    expect(w.find('.msg-submit-btn').exists()).toBe(false)
+    await flushPromises()
+    expect(w.find('.msg-submit-btn').exists()).toBe(true)
+  })
+
+  it('calls /api/submit with epicData when submit button is clicked', async () => {
+    const epicData = { epic_title: 'Mon epic', epic_description: 'Desc', user_stories: [] }
+    mockFetchOk([
+      `data: ${JSON.stringify({ __epic_data: epicData })}`,
+      'data: "## Epic : Mon epic\\n\\n[FOR_VALIDATION]"',
+      'data: [DONE]',
+    ])
+    const w = mountPage()
+    await flushPromises()
+    await sendMessage(w)
+
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({
+        epic: { iid: 1, web_url: 'http://gitlab/epic/1', title: 'Mon epic' },
+        issues: [],
+      }),
+    }))
+
+    await w.find('.msg-submit-btn').trigger('click')
+    await flushPromises()
+
+    expect(w.find('.result-bar').exists()).toBe(true)
+  })
+})

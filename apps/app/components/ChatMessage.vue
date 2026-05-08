@@ -2,10 +2,16 @@
 import { computed } from 'vue'
 import { Marked } from 'marked'
 
-const props = defineProps<{
+const FOR_VALIDATION_TAG = '[FOR_VALIDATION]'
+
+const props = withDefaults(defineProps<{
   role: 'user' | 'assistant'
   content: string
-}>()
+  showSubmit?: boolean
+  isSubmitting?: boolean
+}>(), { showSubmit: false, isSubmitting: false })
+
+const emit = defineEmits<{ submit: [] }>()
 
 const md = new Marked({
   renderer: {
@@ -13,7 +19,10 @@ const md = new Marked({
   },
 })
 
-const renderedContent = computed(() => md.parse(props.content) as string)
+const hasValidationTag = computed(() => props.content.includes(FOR_VALIDATION_TAG))
+const cleanContent = computed(() => props.content.replace(FOR_VALIDATION_TAG, '').trimEnd())
+const renderedContent = computed(() => md.parse(cleanContent.value) as string)
+const showButton = computed(() => props.role === 'assistant' && props.showSubmit && hasValidationTag.value)
 </script>
 
 <template>
@@ -29,7 +38,22 @@ const renderedContent = computed(() => md.parse(props.content) as string)
   <div v-else class="msg-asst-wrap">
     <div class="msg-asst">
       <div class="asst-label">factory</div>
+
+      <div v-if="showButton" class="msg-submit-row">
+        <button class="msg-submit-btn" :disabled="isSubmitting" @click="emit('submit')">
+          <span v-if="isSubmitting" class="msg-submit-spinner" aria-hidden="true" />
+          {{ isSubmitting ? 'Création en cours…' : 'Envoyer sur gitlab' }}
+        </button>
+      </div>
+
       <div class="asst-text" v-html="renderedContent" />
+
+      <div v-if="showButton" class="msg-submit-row">
+        <button class="msg-submit-btn" :disabled="isSubmitting" @click="emit('submit')">
+          <span v-if="isSubmitting" class="msg-submit-spinner" aria-hidden="true" />
+          {{ isSubmitting ? 'Création en cours…' : 'Envoyer sur gitlab' }}
+        </button>
+      </div>
     </div>
   </div>
 </template>
@@ -119,4 +143,50 @@ const renderedContent = computed(() => md.parse(props.content) as string)
 .asst-text :deep(ol)           { padding-left: 1.25rem; margin: 0.25rem 0; }
 .asst-text :deep(li)           { margin: 0.1rem 0; }
 .asst-text :deep(code)         { font-family: var(--mono); font-size: 0.75em; background: var(--border); padding: 0.1em 0.3em; border-radius: 2px; }
+
+/* ── Submit button (inside reformulation bubble) ─────────── */
+
+.msg-submit-row {
+  margin: 0.5rem 0;
+}
+
+.msg-submit-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: var(--hi);
+  color: var(--bg);
+  border: none;
+  border-radius: 3px;
+  padding: 0.45rem 1rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.msg-submit-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.msg-submit-btn:not(:disabled):hover {
+  opacity: 0.85;
+}
+
+.msg-submit-spinner {
+  display: inline-block;
+  width: 0.7em;
+  height: 0.7em;
+  border: 1.5px solid currentColor;
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.7s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
 </style>
