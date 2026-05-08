@@ -100,6 +100,16 @@ if [ "$worker_ready" = true ]; then
   fi
 fi
 
+# ─── Create production namespace ─────────────────────────────────────────────
+
+echo "==> Creating namespace 'factory'..."
+if tcli operator namespace describe "factory" &>/dev/null; then
+  echo "    Namespace 'factory' already exists — skipping."
+else
+  tcli operator namespace create --retention 72h "factory"
+  echo "    Namespace 'factory' created (retention: 72h)."
+fi
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""

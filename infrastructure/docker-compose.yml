@@ -249,6 +249,28 @@ services:
         condition: service_healthy
 
   # ---------------------------------------------------------------------------
+  # Pipeline Worker — Temporal worker TypeScript orchestrant le pipeline dev→merge (EPIC-04)
+  # Build requis avant up : npm run build -w @factory/worker-pipeline
+  # ---------------------------------------------------------------------------
+  pipeline-worker:
+    build:
+      context: ../workers/pipeline
+      dockerfile: Dockerfile
+    container_name: pipeline-worker
+    restart: unless-stopped
+    environment:
+      TEMPORAL_ADDRESS: "temporal:7233"
+      TEMPORAL_NAMESPACE: "factory"
+      TEMPORAL_TASK_QUEUE: "factory-pipeline"
+      GITLAB_API_URL: "http://gitlab/api/v4"
+      GITLAB_API_TOKEN: "${GITLAB_API_TOKEN}"
+    networks:
+      - factory-network
+    depends_on:
+      temporal:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
   # Portainer CE — Monitoring et gestion des containers (UI web)
   # UI HTTPS : http://localhost:9443  |  Edge agent tunnel : 8000
   # ---------------------------------------------------------------------------
