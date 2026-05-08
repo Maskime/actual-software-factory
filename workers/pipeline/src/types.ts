@@ -8,4 +8,5 @@ export const WORKFLOW_LABELS = {
   review: 'workflow::review',
   fix: 'workflow::fix',
   sonarqube: 'workflow::sonarqube',
+  awaiting_approval: 'workflow::awaiting-approval',
 } as const;

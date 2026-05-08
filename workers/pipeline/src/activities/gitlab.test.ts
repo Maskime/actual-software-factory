@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { ApplicationFailure } from '@temporalio/activity'
-import { applyWorkflowLabel, closeIssue } from './gitlab.js'
+import { applyWorkflowLabel, closeIssue, addIssueComment } from './gitlab.js'
 
 const TOKEN = 'test-token'
 const BASE_URL = 'http://test-gitlab/api/v4'
@@ -95,7 +95,7 @@ describe('closeIssue', () => {
         method: 'PUT',
         body: JSON.stringify({
           state_event: 'close',
-          remove_labels: 'workflow::dev,workflow::review,workflow::fix,workflow::sonarqube',
+          remove_labels: 'workflow::dev,workflow::review,workflow::fix,workflow::sonarqube,workflow::awaiting-approval',
         }),
       })
     )
@@ -108,6 +108,60 @@ describe('closeIssue', () => {
         err instanceof ApplicationFailure &&
         err.nonRetryable === true &&
         err.type === 'GitLabClientError'
+    )
+  })
+})
+
+describe('addIssueComment', () => {
+  beforeEach(() => {
+    process.env.GITLAB_API_TOKEN = TOKEN
+    process.env.GITLAB_API_URL = BASE_URL
+  })
+
+  afterEach(() => {
+    delete process.env.GITLAB_API_TOKEN
+    delete process.env.GITLAB_API_URL
+    vi.unstubAllGlobals()
+  })
+
+  it('calls POST to notes endpoint with body', async () => {
+    vi.stubGlobal('fetch', mockFetch(201, true))
+    await addIssueComment(3, 42, 'hello')
+    expect(fetch).toHaveBeenCalledWith(
+      `${BASE_URL}/projects/3/issues/42/notes`,
+      expect.objectContaining({
+        method: 'POST',
+        headers: { 'PRIVATE-TOKEN': TOKEN, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ body: 'hello' }),
+      })
+    )
+  })
+
+  it('throws nonRetryable GitLabClientError on 4xx', async () => {
+    vi.stubGlobal('fetch', mockFetch(403, false))
+    await expect(addIssueComment(3, 42, 'msg')).rejects.toSatisfy(
+      (err: unknown) =>
+        err instanceof ApplicationFailure &&
+        err.nonRetryable === true &&
+        err.type === 'GitLabClientError'
+    )
+  })
+
+  it('throws retryable error on 5xx', async () => {
+    vi.stubGlobal('fetch', mockFetch(500, false))
+    await expect(addIssueComment(3, 42, 'msg')).rejects.toThrow('server error 500')
+    await expect(addIssueComment(3, 42, 'msg')).rejects.not.toSatisfy(
+      (err: unknown) => err instanceof ApplicationFailure
+    )
+  })
+
+  it('throws nonRetryable MissingConfigError when GITLAB_API_TOKEN is missing', async () => {
+    delete process.env.GITLAB_API_TOKEN
+    await expect(addIssueComment(3, 42, 'msg')).rejects.toSatisfy(
+      (err: unknown) =>
+        err instanceof ApplicationFailure &&
+        err.nonRetryable === true &&
+        err.type === 'MissingConfigError'
     )
   })
 })
