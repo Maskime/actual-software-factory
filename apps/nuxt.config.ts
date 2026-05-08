@@ -19,5 +19,7 @@ export default defineNuxtConfig({
     anthropicApiKey: '',
     anthropicModel: '',
     anthropicSystemPrompt: '',
+    mcpGitlabUrl: 'http://localhost:3001',
+    gitlabProjectId: '',
   },
 })

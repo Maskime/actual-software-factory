@@ -1,10 +1,45 @@
 import { getToken } from '#auth'
 import { defineEventHandler, createError, readBody } from 'h3'
+import { Client } from '@modelcontextprotocol/sdk/client/index.js'
+import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import type { EpicData } from '../../app/utils/sseParser'
 
 interface SubmitBody {
   projectId: number
   epicData: EpicData
+}
+
+interface EpicResult {
+  iid: number
+  id: number
+  title: string
+  web_url: string
+}
+
+async function createEpicViaMcp(
+  mcpUrl: string,
+  projectId: string,
+  title: string,
+  description: string
+): Promise<EpicResult> {
+  const client = new Client({ name: 'portal', version: '1.0' })
+  const transport = new StreamableHTTPClientTransport(new URL(`${mcpUrl}/mcp`))
+  await client.connect(transport)
+  try {
+    const result = await client.callTool({
+      name: 'gitlab_create_epic',
+      arguments: { project_id: projectId, title, description },
+    })
+    const content = result.content as Array<{ type: string; text: string }>
+    if (result.isError) {
+      const detail = content[0]?.text ?? 'Erreur inconnue'
+      throw new Error(detail)
+    }
+    const text = content[0]?.text ?? '{}'
+    return JSON.parse(text) as EpicResult
+  } finally {
+    await client.close()
+  }
 }
 
 export default defineEventHandler(async (event) => {
@@ -22,23 +57,21 @@ export default defineEventHandler(async (event) => {
   const config = useRuntimeConfig(event)
   const baseUrl = (config.gitlabInternalUrl as string) || (config.gitlabUrl as string)
   const accessToken = token.accessToken as string
+  const mcpGitlabUrl = config.mcpGitlabUrl as string
+  const targetProjectId = String((config.gitlabProjectId as string) || projectId)
 
-  const epicRes = await fetch(`${baseUrl}/api/v4/projects/${projectId}/issues`, {
-    method: 'POST',
-    headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      title: `[EPIC] ${epicData.epic_title}`,
-      description: epicData.epic_description,
-      labels: 'epic',
-    }),
-  })
-
-  if (!epicRes.ok) {
-    const detail = await epicRes.text()
-    throw createError({ statusCode: 502, message: `Erreur création epic GitLab : ${detail}` })
+  let epic: EpicResult
+  try {
+    epic = await createEpicViaMcp(
+      mcpGitlabUrl,
+      targetProjectId,
+      epicData.epic_title,
+      epicData.epic_description ?? ''
+    )
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    throw createError({ statusCode: 502, message: `Erreur MCP création epic : ${detail}` })
   }
-
-  const epic: { iid: number; web_url: string } = await epicRes.json()
 
   const createdIssues: Array<{ iid: number; title: string; web_url: string }> = []
 
@@ -60,7 +93,6 @@ export default defineEventHandler(async (event) => {
       const issue: { iid: number; title: string; web_url: string } = await issueRes.json()
       createdIssues.push({ iid: issue.iid, title: issue.title, web_url: issue.web_url })
 
-      // Create a "relates_to" link between the user story and the epic issue
       await fetch(`${baseUrl}/api/v4/projects/${projectId}/issues/${issue.iid}/links`, {
         method: 'POST',
         headers: { Authorization: `Bearer ${accessToken}`, 'Content-Type': 'application/json' },
@@ -74,7 +106,7 @@ export default defineEventHandler(async (event) => {
   }
 
   return {
-    epic: { iid: epic.iid, web_url: epic.web_url, title: epicData.epic_title },
+    epic: { iid: epic.iid, web_url: epic.web_url, title: epic.title },
     issues: createdIssues,
   }
 })
