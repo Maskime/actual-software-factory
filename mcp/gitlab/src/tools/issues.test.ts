@@ -8,6 +8,7 @@ import {
   handleUpdateIssue,
   handleCloseIssue,
   handleCreateIssueLink,
+  handleGetIssueComments,
 } from './issues.js'
 
 const baseIssue = {
@@ -157,6 +158,45 @@ describe('handleCreateIssueLink()', () => {
   it('returns errorResponse on API error', async () => {
     const client = { post: vi.fn().mockRejectedValue(new GitLabApiError('fail', 404, 'GITLAB_NOT_FOUND')) } as unknown as GitLabClient
     const result = await handleCreateIssueLink(client, { project_id: '3', issue_iid: 1, target_project_id: '3', target_issue_iid: 99 })
+    expect(result.isError).toBe(true)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.error.code).toBe('GITLAB_NOT_FOUND')
+  })
+})
+
+describe('handleGetIssueComments()', () => {
+  const humanNote = { id: 1, body: 'Nice work', author: { id: 10, username: 'alice', name: 'Alice' }, created_at: '2024-01-01T00:00:00Z', system: false }
+  const systemNote = { id: 2, body: 'closed by commit abc', author: { id: 0, username: 'gitlab-bot', name: 'GitLab Bot' }, created_at: '2024-01-02T00:00:00Z', system: true }
+
+  it('returns only human notes by default and maps fields correctly', async () => {
+    const client = { get: vi.fn().mockResolvedValue([humanNote, systemNote]) } as unknown as GitLabClient
+    const result = await handleGetIssueComments(client, { project_id: '3', issue_iid: 1 })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0]).toEqual({ id: 1, author: 'alice', body: 'Nice work', created_at: '2024-01-01T00:00:00Z' })
+    expect(parsed[0].system).toBeUndefined()
+    expect(parsed[0].author_id).toBeUndefined()
+  })
+
+  it('returns all notes when include_system_notes is true', async () => {
+    const client = { get: vi.fn().mockResolvedValue([humanNote, systemNote]) } as unknown as GitLabClient
+    const result = await handleGetIssueComments(client, { project_id: '3', issue_iid: 1, include_system_notes: true })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed).toHaveLength(2)
+  })
+
+  it('passes per_page and sort params to client', async () => {
+    const mockGet = vi.fn().mockResolvedValue([])
+    const client = { get: mockGet } as unknown as GitLabClient
+    await handleGetIssueComments(client, { project_id: '3', issue_iid: 1 })
+    const queryParams = mockGet.mock.calls[0][1] as Record<string, unknown>
+    expect(queryParams.per_page).toBe(100)
+    expect(queryParams.sort).toBe('asc')
+  })
+
+  it('returns errorResponse when issue does not exist', async () => {
+    const client = { get: vi.fn().mockRejectedValue(new GitLabApiError('not found', 404, 'GITLAB_NOT_FOUND')) } as unknown as GitLabClient
+    const result = await handleGetIssueComments(client, { project_id: '3', issue_iid: 99 })
     expect(result.isError).toBe(true)
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.error.code).toBe('GITLAB_NOT_FOUND')
