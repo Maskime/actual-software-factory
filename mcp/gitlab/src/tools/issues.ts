@@ -269,6 +269,53 @@ export async function handleCloseIssue(
   }
 }
 
+// gitlab_get_issue_comments
+
+interface GitLabNote {
+  id: number;
+  body: string;
+  author: { id: number; username: string; name: string };
+  created_at: string;
+  system: boolean;
+}
+
+export const getIssueCommentsSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  issue_iid: z.number().int().positive().describe("Issue IID (project-scoped integer ID)"),
+  include_system_notes: z.boolean().optional()
+    .describe("Include system-generated notes (default: false)"),
+});
+
+export async function handleGetIssueComments(
+  client: GitLabClient,
+  params: z.infer<typeof getIssueCommentsSchema>
+): Promise<ToolResult> {
+  try {
+    const notes = await client.get<GitLabNote[]>(
+      `${projectPath(params.project_id)}/issues/${params.issue_iid}/notes`,
+      { per_page: 100, sort: "asc" }
+    );
+    const filtered = params.include_system_notes
+      ? notes
+      : notes.filter((n) => !n.system);
+    return {
+      content: [{
+        type: "text" as const,
+        text: JSON.stringify(
+          filtered.map((n) => ({
+            id: n.id,
+            author: n.author.username,
+            body: n.body,
+            created_at: n.created_at,
+          }))
+        ),
+      }],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
 // gitlab_create_issue_link
 
 interface GitLabIssueLink {

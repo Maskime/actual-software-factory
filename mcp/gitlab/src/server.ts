@@ -14,6 +14,8 @@ import {
   handleCloseIssue,
   createIssueLinkSchema,
   handleCreateIssueLink,
+  getIssueCommentsSchema,
+  handleGetIssueComments,
 } from "./tools/issues.js";
 import {
   createMrSchema,
@@ -109,6 +111,13 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     "Create a link between two GitLab issues. Supported link types: relates_to (default), blocks, is_blocked_by. Links are visible in the 'Linked issues' section of each issue. Returns source/target IIDs, link type, and URLs.",
     createIssueLinkSchema.shape,
     (params) => handleCreateIssueLink(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_issue_comments",
+    "Get the comments (human notes) of a GitLab issue. System notes are excluded by default. Returns id, author username, body, and created_at for each comment. Limited to 100 comments per call.",
+    getIssueCommentsSchema.shape,
+    (params) => handleGetIssueComments(client, params)
   );
 
   server.tool(
