@@ -31,6 +31,26 @@ interface EpicResult {
   web_url: string
 }
 
+type UserStory = z.infer<typeof UserStorySchema>
+
+function buildIssueDescription(us: UserStory, epicIid: number): string {
+  const sections: string[] = []
+
+  if (us.context) sections.push(`## Contexte\n\n${us.context}`)
+  sections.push(`## Description\n\n${us.description}`)
+
+  if (us.acceptance_criteria.length) {
+    const list = us.acceptance_criteria.map(c => `- [ ] ${c}`).join('\n')
+    sections.push(`## Critères d'acceptance\n\n${list}`)
+  }
+
+  if (us.technical_notes) sections.push(`## Notes techniques\n\n${us.technical_notes}`)
+  if (us.technical_constraints) sections.push(`## Contraintes techniques\n\n${us.technical_constraints}`)
+
+  sections.push(`---\n\n_Lié à l'epic #${epicIid}_`)
+  return sections.join('\n\n')
+}
+
 async function createEpicViaMcp(
   mcpUrl: string,
   projectId: string,
@@ -100,21 +120,7 @@ export default defineEventHandler(async (event) => {
   const createdIssues: Array<{ iid: number; title: string; web_url: string }> = []
 
   for (const us of epicData.user_stories) {
-    const sections: string[] = []
-
-    if (us.context) sections.push(`## Contexte\n\n${us.context}`)
-    sections.push(`## Description\n\n${us.description}`)
-
-    if (us.acceptance_criteria.length) {
-      const list = us.acceptance_criteria.map(c => `- [ ] ${c}`).join('\n')
-      sections.push(`## Critères d'acceptance\n\n${list}`)
-    }
-
-    if (us.technical_notes) sections.push(`## Notes techniques\n\n${us.technical_notes}`)
-    if (us.technical_constraints) sections.push(`## Contraintes techniques\n\n${us.technical_constraints}`)
-
-    sections.push(`---\n\n_Lié à l'epic #${epic.iid}_`)
-    const description = sections.join('\n\n')
+    const description = buildIssueDescription(us, epic.iid)
 
     const issueRes = await fetch(`${baseUrl}/api/v4/projects/${targetProjectId}/issues`, {
       method: 'POST',
