@@ -4,11 +4,13 @@ export interface PipelineInput {
 }
 
 export const WORKFLOW_LABELS = {
-  dev: 'workflow::dev',
-  review: 'workflow::review',
-  fix: 'workflow::fix',
-  sonarqube: 'workflow::sonarqube',
+  dev:               'workflow::dev',
+  review:            'workflow::review',
+  fix:               'workflow::fix',
+  sonarqube:         'workflow::sonarqube',
   awaiting_approval: 'workflow::awaiting-approval',
+  merge:             'workflow::merge',
+  suspended:         'workflow::suspended',
 } as const;
 
 // Temporal search attribute values for PipelineStage (Keyword type).
@@ -21,5 +23,6 @@ export const PIPELINE_STAGE = {
   awaiting_approval: 'awaiting-approval',
   merge:             'merge',
   done:              'done',
+  suspended:         'suspended',
 } as const;
 export type PipelineStageValue = typeof PIPELINE_STAGE[keyof typeof PIPELINE_STAGE];

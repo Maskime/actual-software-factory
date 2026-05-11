@@ -1,6 +1,6 @@
 import { ApplicationFailure } from '@temporalio/activity';
 
-const ALL_WORKFLOW_LABELS = 'workflow::dev,workflow::review,workflow::fix,workflow::sonarqube,workflow::awaiting-approval';
+const ALL_WORKFLOW_LABELS = 'workflow::dev,workflow::review,workflow::fix,workflow::sonarqube,workflow::awaiting-approval,workflow::merge,workflow::suspended';
 
 function gitlabConfig(): { baseUrl: string; token: string } {
   const baseUrl = process.env.GITLAB_API_URL ?? 'http://gitlab/api/v4';

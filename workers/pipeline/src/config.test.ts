@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { gitlabActivityOptions, agentActivityOptions, humanInTheLoopConfig } from './config.js'
+import { gitlabActivityOptions, agentActivityOptions, humanInTheLoopConfig, suspendNotificationConfig } from './config.js'
 
 const GITLAB_KEYS = [
   'GITLAB_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT',
@@ -17,10 +17,11 @@ const AGENT_KEYS = [
   'AGENT_ACTIVITY_BACKOFF_COEFFICIENT',
 ] as const
 
-const HITL_KEYS = ['HUMAN_IN_THE_LOOP', 'HUMAN_IN_THE_LOOP_TIMEOUT'] as const
+const HITL_KEYS    = ['HUMAN_IN_THE_LOOP', 'HUMAN_IN_THE_LOOP_TIMEOUT'] as const
+const SUSPEND_KEYS = ['SUSPEND_NOTIFICATION'] as const
 
 function clearEnv() {
-  for (const k of [...GITLAB_KEYS, ...AGENT_KEYS, ...HITL_KEYS]) delete process.env[k]
+  for (const k of [...GITLAB_KEYS, ...AGENT_KEYS, ...HITL_KEYS, ...SUSPEND_KEYS]) delete process.env[k]
 }
 
 describe('gitlabActivityOptions', () => {
@@ -123,5 +124,24 @@ describe('humanInTheLoopConfig', () => {
   it('overrides timeout via env var', () => {
     process.env.HUMAN_IN_THE_LOOP_TIMEOUT = '1 hour'
     expect(humanInTheLoopConfig().timeout).toBe('1 hour')
+  })
+})
+
+describe('suspendNotificationConfig', () => {
+  beforeEach(clearEnv)
+  afterEach(clearEnv)
+
+  it('returns enabled=true by default', () => {
+    expect(suspendNotificationConfig().enabled).toBe(true)
+  })
+
+  it('returns enabled=false when SUSPEND_NOTIFICATION=false', () => {
+    process.env.SUSPEND_NOTIFICATION = 'false'
+    expect(suspendNotificationConfig().enabled).toBe(false)
+  })
+
+  it('returns enabled=true when SUSPEND_NOTIFICATION=true', () => {
+    process.env.SUSPEND_NOTIFICATION = 'true'
+    expect(suspendNotificationConfig().enabled).toBe(true)
   })
 })

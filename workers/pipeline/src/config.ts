@@ -36,3 +36,7 @@ export function humanInTheLoopConfig(): { enabled: boolean; timeout: Duration } 
     timeout: (process.env.HUMAN_IN_THE_LOOP_TIMEOUT ?? '24 hours') as Duration,
   };
 }
+
+export function suspendNotificationConfig(): { enabled: boolean } {
+  return { enabled: process.env.SUSPEND_NOTIFICATION !== 'false' };
+}
