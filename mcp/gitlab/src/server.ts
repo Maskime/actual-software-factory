@@ -59,6 +59,14 @@ import {
   getTestReportSchema,
   handleGetTestReport,
 } from "./tools/pipelines.js";
+import {
+  listProjectsSchema,
+  handleListProjects,
+  getProjectSchema,
+  handleGetProject,
+  createProjectSchema,
+  handleCreateProject,
+} from "./tools/projects.js";
 
 export function buildMcpServer(client: GitLabClient): McpServer {
   const server = new McpServer({
@@ -255,6 +263,27 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     "Get the test report of a GitLab CI/CD pipeline. Returns total, success, failed, error, and skipped test counts plus per-suite breakdown. Returns a structured error if no test report exists for the pipeline.",
     getTestReportSchema.shape,
     (params) => handleGetTestReport(client, params)
+  );
+
+  server.tool(
+    "gitlab_list_projects",
+    "List GitLab projects accessible to the authenticated user. Supports filtering by membership, search term, and visibility. Returns up to 100 projects per page.",
+    listProjectsSchema.shape,
+    (params) => handleListProjects(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_project",
+    "Get the details of a GitLab project by its numeric ID or URL-encoded namespace/path (e.g. 'root/my-project'). Returns name, namespace, visibility, URLs, default branch, and creation date.",
+    getProjectSchema.shape,
+    (params) => handleGetProject(client, params)
+  );
+
+  server.tool(
+    "gitlab_create_project",
+    "Create a new GitLab project. Accepts an optional namespace_id to place the project in a group. Visibility defaults to private. Returns the created project ID, name, path, and URLs.",
+    createProjectSchema.shape,
+    (params) => handleCreateProject(client, params)
   );
 
   return server;
