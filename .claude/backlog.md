@@ -1,5 +1,10 @@
 # Backlog — Points modérés
 
+## EPIC-05 / US-01 (Agent Worker — Setup container #77)
+
+- [US-1 EPIC-05] M1 : Conflit potentiel de namespace Temporal entre `agent-worker` (namespace `factory`) et `mcp-temporal` (configuré sur `factory-test`) — si des activités agents appellent `mcp-temporal` pour interroger/signaler des workflows, les appels échoueront (namespace mismatch). À corriger lors de l'EPIC-05+ en paramétrant le namespace de `mcp-temporal` via une variable d'environnement ou en documentant la limitation.
+- [US-1 EPIC-05] M2 : Healthcheck absent sur `agent-worker` — voir issue GitLab dédiée (créée dans le ticket #77)
+
 ## EPIC-02 / US-01 (MCP GitLab — Scaffolding)
 
 - [EPIC-02/US-01] M1 : `moduleResolution: NodeNext` + `module: NodeNext` préférable à `Node16` pour les packages ESM TypeScript 5.0+ (évite les imports `.js` manuels)

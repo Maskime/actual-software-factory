@@ -1,0 +1,29 @@
+{
+  "name": "@factory/worker-agents",
+  "version": "0.1.0",
+  "description": "Temporal agent worker — shared container for all factory agents (EPIC-05 to EPIC-09)",
+  "type": "module",
+  "main": "dist/worker.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/worker.js",
+    "dev": "tsx src/worker.ts",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage"
+  },
+  "dependencies": {
+    "@temporalio/activity": "^1.17.1",
+    "@temporalio/client": "^1.17.1",
+    "@temporalio/common": "^1.17.1",
+    "@temporalio/worker": "^1.17.1",
+    "@temporalio/workflow": "^1.17.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "@vitest/coverage-v8": "^3.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.8.0",
+    "vitest": "^3.1.0"
+  }
+}

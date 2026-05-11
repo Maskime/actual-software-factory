@@ -273,6 +273,37 @@ services:
         condition: service_healthy
 
   # ---------------------------------------------------------------------------
+  # Agent Worker — Temporal worker partagé pour agents EPIC-05 à EPIC-09
+  # Build requis avant up : npm run build -w @factory/worker-agents
+  # Prérequis : ANTHROPIC_API_KEY doit être renseigné dans infrastructure/.env
+  # ---------------------------------------------------------------------------
+  agent-worker:
+    build:
+      context: ../workers/agents
+      dockerfile: Dockerfile
+    container_name: agent-worker
+    restart: unless-stopped
+    environment:
+      TEMPORAL_ADDRESS: "temporal:7233"
+      TEMPORAL_NAMESPACE: "factory"
+      TEMPORAL_TASK_QUEUE: "factory-agents"
+      GITLAB_API_URL: "http://gitlab/api/v4"
+      GITLAB_API_TOKEN: "${GITLAB_API_TOKEN}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      MCP_GITLAB_URL: "http://mcp-gitlab:3000/mcp"
+      MCP_TEMPORAL_URL: "http://mcp-temporal:3000/mcp"
+      MCP_SONARQUBE_URL: "http://mcp-sonarqube:3000/mcp"
+    networks:
+      - factory-network
+    depends_on:
+      temporal:
+        condition: service_healthy
+      mcp-gitlab:
+        condition: service_started
+      mcp-temporal:
+        condition: service_started
+
+  # ---------------------------------------------------------------------------
   # Portainer CE — Monitoring et gestion des containers (UI web)
   # UI HTTPS : http://localhost:9443  |  Edge agent tunnel : 8000
   # ---------------------------------------------------------------------------
