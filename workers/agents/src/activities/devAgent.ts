@@ -9,6 +9,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 import { setupWorkspace } from './setupWorkspace.js';
 import { AGENT_TOOLS, executeTool } from '../tools.js';
 import type { IssueContext, WorkspaceContext } from '../types.js';
+import { slugify } from '../utils.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -409,7 +410,12 @@ async function verifyImplementation(issue: IssueContext, workDir: string): Promi
   );
 }
 
-async function commitAndPush(workDir: string, issueIid: number, issueTitle: string): Promise<void> {
+async function commitAndPush(
+  workDir: string,
+  issueIid: number,
+  issueTitle: string,
+  branchName: string
+): Promise<void> {
   await execFileAsync('git', ['config', '--local', 'user.email', 'agent@software-factory'], {
     cwd: workDir,
   });
@@ -429,8 +435,8 @@ async function commitAndPush(workDir: string, issueIid: number, issueTitle: stri
     ['commit', '-m', `feat: implement ${issueTitle} (#${issueIid})`],
     { cwd: workDir }
   );
-  await execFileAsync('git', ['push', 'origin', `feature/issue-${issueIid}`], { cwd: workDir });
-  log.info('Code committed and pushed', { issueIid, branch: `feature/issue-${issueIid}` });
+  await execFileAsync('git', ['push', 'origin', branchName], { cwd: workDir });
+  log.info('Code committed and pushed', { issueIid, branch: branchName });
 }
 
 export async function runDevAgent(input: DevAgentInput): Promise<void> {
@@ -449,7 +455,8 @@ export async function runDevAgent(input: DevAgentInput): Promise<void> {
     }
     ctx = await setupWorkspace({ ...input, workflowRunId });
 
-    const branchName = `feature/issue-${input.issueIid}`;
+    const slug = slugify(ctx.issue.title) || String(input.issueIid);
+    const branchName = `feature/${input.issueIid}-${slug}`;
     const currentBranch = (await execBash('git branch --show-current', workDir)).stdout.trim();
     if (currentBranch !== branchName) {
       const branchExists =
@@ -484,7 +491,7 @@ export async function runDevAgent(input: DevAgentInput): Promise<void> {
     await verifyImplementation(ctx.issue, workDir);
 
     log.info('Committing and pushing', { issueIid: input.issueIid });
-    await commitAndPush(workDir, input.issueIid, ctx.issue.title);
+    await commitAndPush(workDir, input.issueIid, ctx.issue.title, branchName);
 
     log.info('Dev agent completed successfully', { issueIid: input.issueIid });
   } finally {
