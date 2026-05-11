@@ -110,6 +110,25 @@ else
   echo "    Namespace 'factory' created (retention: 72h)."
 fi
 
+# ─── Register custom search attributes ───────────────────────────────────────
+# Must run before the pipeline worker starts its first workflow execution.
+# Attributes are namespace-scoped; register for both production and test namespaces.
+
+echo "==> Registering custom search attributes..."
+for ns in "factory" "${TEMPORAL_NAMESPACE}"; do
+  for attr_def in "GitLabIssueIid:Int" "PipelineStage:Keyword"; do
+    attr_name="${attr_def%%:*}"
+    attr_type="${attr_def##*:}"
+    if tcli operator search-attribute list --namespace "$ns" 2>/dev/null | grep -q "$attr_name"; then
+      echo "    [$ns] Search attribute '$attr_name' already exists — skipping."
+    else
+      tcli operator search-attribute create \
+        --namespace "$ns" --name "$attr_name" --type "$attr_type"
+      echo "    [$ns] Search attribute '$attr_name' ($attr_type) created."
+    fi
+  done
+done
+
 # ─── Summary ──────────────────────────────────────────────────────────────────
 
 echo ""

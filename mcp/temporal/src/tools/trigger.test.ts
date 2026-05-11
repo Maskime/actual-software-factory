@@ -51,6 +51,7 @@ describe("handleTriggerPipeline()", () => {
       taskQueue: "factory-pipeline",
       workflowId: "pipeline-issue-7",
       args: [{ issueIid: 7, projectId: 42 }],
+      memo: { issueIid: 7, projectId: 42 },
     });
   });
 

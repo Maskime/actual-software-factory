@@ -117,7 +117,12 @@ describe('handleGetWorkflowStatus()', () => {
     status: 1, // Running
     startTime: new Date('2024-01-01T00:00:00Z'),
     closeTime: undefined,
+    typedSearchAttributes: { get: vi.fn().mockReturnValue(undefined) },
   }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+  })
 
   it('returns status for a running workflow', async () => {
     const handle = makeHandle({ describe: vi.fn().mockResolvedValue(baseDescription) })
@@ -178,6 +183,35 @@ describe('handleGetWorkflowStatus()', () => {
 
     const result = await handleGetWorkflowStatus(tc, { workflow_id: 'wf-1' })
     expect(parse(result).status).toBe('Unknown')
+  })
+
+  it('returns null pipeline_stage when search attribute is absent', async () => {
+    const handle = makeHandle({ describe: vi.fn().mockResolvedValue(baseDescription) })
+    const tc = makeClient(handle)
+
+    const result = await handleGetWorkflowStatus(tc, { workflow_id: 'wf-1' })
+    expect(parse(result).pipeline_stage).toBeNull()
+  })
+
+  it('includes pipeline_stage when PipelineStage search attribute is set', async () => {
+    const descWithStage = {
+      ...baseDescription,
+      typedSearchAttributes: { get: vi.fn().mockReturnValue('awaiting-approval') },
+    }
+    const handle = makeHandle({ describe: vi.fn().mockResolvedValue(descWithStage) })
+    const tc = makeClient(handle)
+
+    const result = await handleGetWorkflowStatus(tc, { workflow_id: 'wf-1' })
+    expect(parse(result).pipeline_stage).toBe('awaiting-approval')
+  })
+
+  it('returns null pipeline_stage when typedSearchAttributes is absent', async () => {
+    const descNoAttrs = { ...baseDescription, typedSearchAttributes: undefined }
+    const handle = makeHandle({ describe: vi.fn().mockResolvedValue(descNoAttrs) })
+    const tc = makeClient(handle)
+
+    const result = await handleGetWorkflowStatus(tc, { workflow_id: 'wf-1' })
+    expect(parse(result).pipeline_stage).toBeNull()
   })
 })
 
@@ -252,6 +286,24 @@ describe('handleListWorkflows()', () => {
 
     await handleListWorkflows(tc, { workflow_type: 'Bad"Type' })
     expect(listMock).toHaveBeenCalledWith({ query: 'WorkflowType = "BadType"' })
+  })
+
+  it('passes issue_iid filter as GitLabIssueIid query', async () => {
+    const listMock = vi.fn().mockReturnValue((async function* () {})())
+    const tc = { client: { workflow: { list: listMock } } } as unknown as TemporalClient
+
+    await handleListWorkflows(tc, { issue_iid: 42 })
+    expect(listMock).toHaveBeenCalledWith({ query: 'GitLabIssueIid = 42' })
+  })
+
+  it('combines issue_iid and status filters with AND', async () => {
+    const listMock = vi.fn().mockReturnValue((async function* () {})())
+    const tc = { client: { workflow: { list: listMock } } } as unknown as TemporalClient
+
+    await handleListWorkflows(tc, { issue_iid: 7, status: 'Running' })
+    expect(listMock).toHaveBeenCalledWith({
+      query: 'ExecutionStatus = "Running" AND GitLabIssueIid = 7',
+    })
   })
 
   it('respects page_size and stops iteration early', async () => {

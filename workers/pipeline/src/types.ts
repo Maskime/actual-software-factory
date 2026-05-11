@@ -10,3 +10,16 @@ export const WORKFLOW_LABELS = {
   sonarqube: 'workflow::sonarqube',
   awaiting_approval: 'workflow::awaiting-approval',
 } as const;
+
+// Temporal search attribute values for PipelineStage (Keyword type).
+// Keys mirror WORKFLOW_LABELS keys where both overlap; 'merge' and 'done' have no GitLab label equivalent.
+export const PIPELINE_STAGE = {
+  dev:               'dev',
+  review:            'review',
+  fix:               'fix',
+  sonarqube:         'sonarqube',
+  awaiting_approval: 'awaiting-approval',
+  merge:             'merge',
+  done:              'done',
+} as const;
+export type PipelineStageValue = typeof PIPELINE_STAGE[keyof typeof PIPELINE_STAGE];
