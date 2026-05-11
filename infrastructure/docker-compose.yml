@@ -290,6 +290,7 @@ services:
       GITLAB_API_URL: "http://gitlab/api/v4"
       GITLAB_API_TOKEN: "${GITLAB_API_TOKEN}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
       MCP_GITLAB_URL: "http://mcp-gitlab:3000/mcp"
       MCP_TEMPORAL_URL: "http://mcp-temporal:3000/mcp"
       MCP_SONARQUBE_URL: "http://mcp-sonarqube:3000/mcp"

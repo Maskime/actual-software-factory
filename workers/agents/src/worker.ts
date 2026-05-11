@@ -1,5 +1,6 @@
 import { Worker, NativeConnection } from '@temporalio/worker';
 import * as setupWorkspaceActivities from './activities/setupWorkspace.js';
+import * as devAgentActivities from './activities/devAgent.js';
 
 const TASK_QUEUE = process.env.TEMPORAL_TASK_QUEUE ?? 'factory-agents';
 const NAMESPACE  = process.env.TEMPORAL_NAMESPACE  ?? 'factory';
@@ -11,7 +12,7 @@ const worker = await Worker.create({
   connection,
   namespace: NAMESPACE,
   taskQueue: TASK_QUEUE,
-  activities: { ...setupWorkspaceActivities },
+  activities: { ...setupWorkspaceActivities, ...devAgentActivities },
 });
 
 process.on('SIGTERM', () => worker.shutdown());

@@ -2,7 +2,6 @@ import { Worker, NativeConnection } from '@temporalio/worker';
 import { fileURLToPath } from 'node:url';
 import webpack from 'webpack';
 import * as gitlabActivities from './activities/gitlab.js';
-import * as agentActivities from './activities/agents.js';
 
 const TASK_QUEUE = process.env.TEMPORAL_TASK_QUEUE ?? 'factory-pipeline';
 const NAMESPACE  = process.env.TEMPORAL_NAMESPACE  ?? 'factory';
@@ -17,8 +16,10 @@ const WORKFLOW_ENV_DEFAULTS: Record<string, string> = {
   GITLAB_ACTIVITY_MAX_ATTEMPTS:              '5',
   GITLAB_ACTIVITY_INITIAL_INTERVAL:          '5s',
   GITLAB_ACTIVITY_BACKOFF_COEFFICIENT:       '2',
+  AGENT_TASK_QUEUE:                           'factory-agents',
   AGENT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT:  '4 hours',
   AGENT_ACTIVITY_START_TO_CLOSE_TIMEOUT:     '60 minutes',
+  AGENT_ACTIVITY_HEARTBEAT_TIMEOUT:          '2 minutes',
   AGENT_ACTIVITY_MAX_ATTEMPTS:               '3',
   AGENT_ACTIVITY_INITIAL_INTERVAL:           '30s',
   AGENT_ACTIVITY_BACKOFF_COEFFICIENT:        '2',
@@ -40,7 +41,7 @@ const worker = await Worker.create({
   connection,
   namespace: NAMESPACE,
   workflowsPath: fileURLToPath(new URL('./workflow.js', import.meta.url)),
-  activities: { ...gitlabActivities, ...agentActivities },
+  activities: { ...gitlabActivities },
   taskQueue: TASK_QUEUE,
   bundlerOptions: {
     webpackConfigHook(config) {
