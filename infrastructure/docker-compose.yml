@@ -262,7 +262,7 @@ services:
       TEMPORAL_ADDRESS: "temporal:7233"
       TEMPORAL_NAMESPACE: "factory"
       TEMPORAL_TASK_QUEUE: "factory-pipeline"
-      GITLAB_API_URL: "http://gitlab/api/v4"
+      GITLAB_API_INTERNAL_URL: "http://gitlab/api/v4"
       GITLAB_API_TOKEN: "${GITLAB_API_TOKEN}"
       HUMAN_IN_THE_LOOP: "${HUMAN_IN_THE_LOOP:-false}"
       HUMAN_IN_THE_LOOP_TIMEOUT: "${HUMAN_IN_THE_LOOP_TIMEOUT:-24 hours}"
@@ -287,13 +287,13 @@ services:
       TEMPORAL_ADDRESS: "temporal:7233"
       TEMPORAL_NAMESPACE: "factory"
       TEMPORAL_TASK_QUEUE: "factory-agents"
-      GITLAB_API_URL: "http://gitlab/api/v4"
+      GITLAB_API_INTERNAL_URL: "http://gitlab/api/v4"
       GITLAB_API_TOKEN: "${GITLAB_API_TOKEN}"
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
       ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
-      MCP_GITLAB_URL: "http://mcp-gitlab:3000/mcp"
-      MCP_TEMPORAL_URL: "http://mcp-temporal:3000/mcp"
-      MCP_SONARQUBE_URL: "http://mcp-sonarqube:3000/mcp"
+      MCP_GITLAB_INTERNAL_URL: "http://mcp-gitlab:3000/mcp"
+      MCP_TEMPORAL_INTERNAL_URL: "http://mcp-temporal:3000/mcp"
+      MCP_SONARQUBE_INTERNAL_URL: "http://mcp-sonarqube:3000/mcp"
     networks:
       - factory-network
     depends_on:
@@ -325,7 +325,10 @@ services:
 
   # ---------------------------------------------------------------------------
   # MCP SonarQube — Serveur MCP officiel SonarSource (EPIC-02)
-  # Image : mcp/sonarqube (https://hub.docker.com/r/mcp/sonarqube)
+  # Image    : mcp/sonarqube (https://hub.docker.com/r/mcp/sonarqube)
+  # Endpoint : /mcp  (confirmé — https://docs.sonarsource.com/sonarqube-mcp-server/build-and-configure/configure)
+  # Accès interne (conteneur→conteneur) : http://mcp-sonarqube:3000/mcp
+  # Accès hôte (tests round-trip)       : http://localhost:3002/mcp  (port 3002 → container 3000)
   # ---------------------------------------------------------------------------
   mcp-sonarqube:
     image: mcp/sonarqube

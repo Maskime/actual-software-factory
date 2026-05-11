@@ -39,8 +39,8 @@ beforeEach(() => {
   vi.clearAllMocks();
 
   process.env.GITLAB_API_TOKEN = 'test-token';
-  process.env.GITLAB_API_URL = 'http://gitlab/api/v4';
-  process.env.MCP_GITLAB_URL = 'http://mcp-gitlab:3000/mcp';
+  process.env.GITLAB_API_INTERNAL_URL = 'http://gitlab/api/v4';
+  process.env.MCP_GITLAB_INTERNAL_URL = 'http://mcp-gitlab:3000/mcp';
 
   // Default execFile: success
   vi.mocked(execFile).mockImplementation(

@@ -3,7 +3,7 @@ import { ApplicationFailure } from '@temporalio/activity';
 const ALL_WORKFLOW_LABELS = 'workflow::dev,workflow::review,workflow::fix,workflow::sonarqube,workflow::awaiting-approval,workflow::merge,workflow::suspended';
 
 function gitlabConfig(): { baseUrl: string; token: string } {
-  const baseUrl = process.env.GITLAB_API_URL ?? 'http://gitlab/api/v4';
+  const baseUrl = process.env.GITLAB_API_INTERNAL_URL ?? 'http://gitlab/api/v4'; // NOSONAR
   const token = process.env.GITLAB_API_TOKEN;
   if (!token) throw ApplicationFailure.nonRetryable('GITLAB_API_TOKEN is not set', 'MissingConfigError');
   return { baseUrl, token };

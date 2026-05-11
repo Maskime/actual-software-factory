@@ -9,9 +9,9 @@ const execFileAsync = promisify(execFile);
 
 function agentConfig(): { gitlabApiUrl: string; token: string; mcpGitlabUrl: string } {
   // NOSONAR — internal Docker hostnames; HTTP is intentional inside the factory network
-  const gitlabApiUrl = process.env.GITLAB_API_URL ?? 'http://gitlab/api/v4'; // NOSONAR
+  const gitlabApiUrl = process.env.GITLAB_API_INTERNAL_URL ?? 'http://gitlab/api/v4'; // NOSONAR
   const token = process.env.GITLAB_API_TOKEN;
-  const mcpGitlabUrl = process.env.MCP_GITLAB_URL ?? 'http://mcp-gitlab:3000/mcp'; // NOSONAR
+  const mcpGitlabUrl = process.env.MCP_GITLAB_INTERNAL_URL ?? 'http://mcp-gitlab:3000/mcp'; // NOSONAR
   if (!token) {
     throw ApplicationFailure.nonRetryable('GITLAB_API_TOKEN is not set', 'MissingConfigError');
   }

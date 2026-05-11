@@ -12,12 +12,12 @@ function mockFetch(status: number, ok: boolean) {
 describe('applyWorkflowLabel', () => {
   beforeEach(() => {
     process.env.GITLAB_API_TOKEN = TOKEN
-    process.env.GITLAB_API_URL = BASE_URL
+    process.env.GITLAB_API_INTERNAL_URL = BASE_URL
   })
 
   afterEach(() => {
     delete process.env.GITLAB_API_TOKEN
-    delete process.env.GITLAB_API_URL
+    delete process.env.GITLAB_API_INTERNAL_URL
     vi.unstubAllGlobals()
   })
 
@@ -77,12 +77,12 @@ describe('applyWorkflowLabel', () => {
 describe('closeIssue', () => {
   beforeEach(() => {
     process.env.GITLAB_API_TOKEN = TOKEN
-    process.env.GITLAB_API_URL = BASE_URL
+    process.env.GITLAB_API_INTERNAL_URL = BASE_URL
   })
 
   afterEach(() => {
     delete process.env.GITLAB_API_TOKEN
-    delete process.env.GITLAB_API_URL
+    delete process.env.GITLAB_API_INTERNAL_URL
     vi.unstubAllGlobals()
   })
 
@@ -115,12 +115,12 @@ describe('closeIssue', () => {
 describe('addIssueComment', () => {
   beforeEach(() => {
     process.env.GITLAB_API_TOKEN = TOKEN
-    process.env.GITLAB_API_URL = BASE_URL
+    process.env.GITLAB_API_INTERNAL_URL = BASE_URL
   })
 
   afterEach(() => {
     delete process.env.GITLAB_API_TOKEN
-    delete process.env.GITLAB_API_URL
+    delete process.env.GITLAB_API_INTERNAL_URL
     vi.unstubAllGlobals()
   })
 
