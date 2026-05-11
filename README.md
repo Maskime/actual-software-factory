@@ -45,6 +45,11 @@ ANTHROPIC_API_KEY=sk-ant-...
 GITLAB_API_TOKEN=glpat-...
 SONARQUBE_AGENT_TOKEN=squ_...
 GITLAB_WEBHOOK_SECRET=$(openssl rand -hex 32)
+
+# Observabilité — Grafana UI sur http://localhost:3100
+GRAFANA_PORT=3100
+GRAFANA_ADMIN_USER=admin
+GRAFANA_ADMIN_PASSWORD=ton_mot_de_passe_grafana
 ```
 
 > **Sécurité :** `infrastructure/.env` est gitignored — ne jamais le commiter. Toutes les clés attendues sont documentées sans valeur dans `infrastructure/.env.example`.
@@ -176,7 +181,25 @@ Le script est idempotent — safe à relancer.
 
 > **Note :** le conteneur `temporal-worker-test` démarre en boucle retry tant que le namespace `factory-test` n'existe pas. C'est le comportement attendu avant que ce script soit exécuté.
 
-### 7. Analyse de test SonarQube (première fois uniquement)
+### 7. Grafana + Loki — observabilité (démarré automatiquement)
+
+Grafana et Loki démarrent avec `docker compose up -d` sans script de bootstrap spécifique. La datasource Loki et le dashboard "Factory — Container Logs" sont provisionnés automatiquement au démarrage.
+
+| Service | URL | Identifiants |
+|---|---|---|
+| Grafana UI | `http://localhost:${GRAFANA_PORT:-3100}` | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
+| Loki API | interne (`loki:3100`) | non exposé sur l'hôte |
+
+Le dashboard pré-configuré affiche les logs de tous les containers, avec des panels dédiés pour `chat`, les serveurs MCP, et le `pipeline-worker`. Pour accéder aux logs d'un container en direct :
+
+```bash
+# Via Grafana (recommandé) → http://localhost:3100 → Dashboards → Factory → Container Logs
+# Via CLI (fallback)
+docker logs -f chat
+docker logs -f mcp-gitlab
+```
+
+### 8. Analyse de test SonarQube (première fois uniquement)
 
 ```bash
 bash infrastructure/scripts/setup-sonarqube-analysis.sh

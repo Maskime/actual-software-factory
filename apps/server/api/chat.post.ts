@@ -3,6 +3,9 @@ import Anthropic from '@anthropic-ai/sdk'
 import { getToken } from '#auth'
 import { QUALIFICATION_PROMPT } from '../prompts/qualification'
 import type { EpicData } from '../../app/utils/sseParser'
+import { createConsola } from 'consola'
+
+const logger = createConsola({ level: 4 }).withTag('chat')
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -189,6 +192,7 @@ export default defineEventHandler(async (event) => {
   }
 
   const model = (config.anthropicModel as string) || DEFAULT_MODEL
+  logger.info(`chat request: ${body.messages.length} messages, projectId=${body.projectId ?? 'none'}, model=${model}`)
   const systemPrompt = (config.anthropicSystemPrompt as string) || QUALIFICATION_PROMPT
 
   const systemBlocks: Anthropic.TextBlockParam[] = [
@@ -231,6 +235,7 @@ export default defineEventHandler(async (event) => {
 
         controller.enqueue(encoder.encode('data: [DONE]\n\n'))
       } catch (err) {
+        logger.error('stream error:', err)
         const message =
           err instanceof Anthropic.APIError
             ? `Erreur API Anthropic : ${err.message}`
