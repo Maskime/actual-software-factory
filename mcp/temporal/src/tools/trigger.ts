@@ -26,6 +26,7 @@ export async function handleTriggerPipeline(
       taskQueue,
       workflowId,
       args: [{ issueIid, projectId }],
+      memo: { issueIid, projectId },
     });
     return {
       content: [

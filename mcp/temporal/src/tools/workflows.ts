@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { WorkflowNotFoundError } from "@temporalio/client";
+import { defineSearchAttributeKey } from "@temporalio/common";
 import type { TemporalClient } from "../temporal-client.js";
 
 // Temporal WorkflowExecutionStatus proto numeric values
@@ -36,6 +37,8 @@ function errorResponse(err: unknown) {
     isError: true as const,
   };
 }
+
+const pipelineStageKey = defineSearchAttributeKey("PipelineStage", "KEYWORD");
 
 // ---------------------------------------------------------------------------
 // temporal_send_signal
@@ -103,6 +106,7 @@ export async function handleGetWorkflowStatus(
       status: currentStatus,
       start_time: description.startTime.toISOString(),
       close_time: description.closeTime?.toISOString() ?? null,
+      pipeline_stage: description.typedSearchAttributes?.get(pipelineStageKey) ?? null,
     };
 
     // For completed workflows, try to retrieve the result with a safety timeout
@@ -135,6 +139,12 @@ export const listWorkflowsSchema = z.object({
     .string()
     .optional()
     .describe("Filter by workflow type name (exact match)"),
+  issue_iid: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Filter by GitLab issue IID (requires GitLabIssueIid custom search attribute)"),
   page_size: z
     .number()
     .int()
@@ -159,6 +169,11 @@ export async function handleListWorkflows(
       // Remove quotes to prevent Temporal Visibility query injection
       const safeType = params.workflow_type.replace(/"/g, "");
       queryParts.push(`WorkflowType = "${safeType}"`);
+    }
+
+    if (params.issue_iid !== undefined) {
+      // z.number().int().positive() guarantees a safe positive integer — no injection risk
+      queryParts.push(`GitLabIssueIid = ${params.issue_iid}`);
     }
 
     const query = queryParts.length > 0 ? queryParts.join(" AND ") : undefined;
