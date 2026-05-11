@@ -158,7 +158,7 @@ describe('runDevAgent — branch already exists', () => {
         const command = cmdArgs[1] as string;
         if (command.includes('git branch --show-current')) return cb(null, 'main', '');
         // branch exists → checkout without -b
-        if (command.includes('git branch --list')) return cb(null, '  feature/issue-5', '');
+        if (command.includes('git branch --list')) return cb(null, '  feature/5-test-issue', '');
         if (command.includes('git status --porcelain')) return cb(null, '', '');
         return cb(null, '', '');
       }
