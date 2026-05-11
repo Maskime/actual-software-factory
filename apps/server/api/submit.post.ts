@@ -3,6 +3,9 @@ import { defineEventHandler, createError, readBody } from 'h3'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { z } from 'zod'
+import { createConsola } from 'consola'
+
+const logger = createConsola({ level: 4 }).withTag('submit')
 
 const UserStorySchema = z.object({
   title: z.string(),
@@ -112,7 +115,9 @@ export default defineEventHandler(async (event) => {
       epicData.epic_title,
       epicData.epic_description
     )
+    logger.info(`epic created: iid=${epic.iid} "${epic.title}"`)
   } catch (err) {
+    logger.error('MCP epic creation failed:', err)
     const detail = err instanceof Error ? err.message : String(err)
     throw createError({ statusCode: 502, message: `Erreur MCP création epic : ${detail}` })
   }
@@ -146,7 +151,7 @@ export default defineEventHandler(async (event) => {
         }),
       })
     } else {
-      console.error(`[submit] Échec création issue "${us.title}" : HTTP ${issueRes.status}`)
+      logger.error(`issue creation failed "${us.title}": HTTP ${issueRes.status}`)
     }
   }
 
