@@ -16,6 +16,7 @@ Software Factory is an automated development pipeline where AI agents handle the
 | LLM | Claude (Anthropic API) | Cloud |
 | Agent ↔ tool communication | MCP servers | On-prem |
 | Requirements qualification UI | Nuxt 4 + Tailwind CSS | Local / Docker (`apps/`) |
+| Observabilité / logs | Grafana + Loki + Promtail | On-prem (Docker) |
 
 **Application language: TypeScript (strict mode)**
 
@@ -88,7 +89,7 @@ Without `NUXT_GITLAB_INTERNAL_URL`, token exchange fails inside Docker because `
 All services run via Docker Compose. The shared Docker network `factory-network` must exist before starting services individually.
 
 ```bash
-# Start all current services (GitLab CE + runner + SonarQube + PostgreSQL)
+# Start all services (GitLab CE + runner + SonarQube + Temporal + Grafana + Loki + chat)
 docker compose -f infrastructure/docker-compose.yml up -d
 
 # Stop
@@ -107,6 +108,8 @@ bash infrastructure/scripts/setup-temporal.sh
 # sets CI/CD variables, updates .gitlab-ci.yml with SonarQube + Temporal stages
 bash infrastructure/scripts/setup-network.sh
 ```
+
+**Grafana (observabilité) :** démarré automatiquement avec `docker compose up -d`. L'accès est sur `http://localhost:${GRAFANA_PORT:-3100}` — identifiants dans `infrastructure/.env` (`GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD`). La datasource Loki et le dashboard "Factory — Container Logs" sont provisionnés automatiquement au démarrage.
 
 **Host prerequisite for SonarQube** (Elasticsearch requires this — set once per machine):
 ```bash
