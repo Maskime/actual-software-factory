@@ -24,6 +24,7 @@ const WORKFLOW_ENV_DEFAULTS: Record<string, string> = {
   AGENT_ACTIVITY_BACKOFF_COEFFICIENT:        '2',
   HUMAN_IN_THE_LOOP:                         'false',
   HUMAN_IN_THE_LOOP_TIMEOUT:                 '24 hours',
+  SUSPEND_NOTIFICATION:                      'true',
 };
 
 const workflowDefines = Object.fromEntries(
