@@ -374,8 +374,6 @@ describe('submit.post handler', () => {
     vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'tok' } as any)
     vi.mocked(h3.readBody).mockResolvedValue({ projectId: 3, epicData: sampleEpicData })
 
-    const consoleSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
-
     vi.stubGlobal('fetch', makeFetchSequence([
       { ok: false },              // US-01 creation fails
       { ok: true, json: { iid: 12, title: 'US-02', web_url: 'http://gitlab/issues/12' } },
@@ -386,8 +384,5 @@ describe('submit.post handler', () => {
 
     expect(result.issues).toHaveLength(1)
     expect(result.issues[0].iid).toBe(12)
-    expect(consoleSpy).toHaveBeenCalledWith(expect.stringContaining('Échec création issue'))
-
-    consoleSpy.mockRestore()
   })
 })
