@@ -2,7 +2,6 @@ import { ApplicationFailure, activityInfo, heartbeat, log } from '@temporalio/ac
 import { execFile } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { rm } from 'node:fs/promises';
-import { promisify } from 'node:util';
 import Anthropic from '@anthropic-ai/sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -11,7 +10,24 @@ import { AGENT_TOOLS, executeTool } from '../tools.js';
 import type { IssueContext, WorkspaceContext } from '../types.js';
 import { slugify } from '../utils.js';
 
-const execFileAsync = promisify(execFile);
+function execFileAsync(
+  file: string,
+  args: string[],
+  options: { cwd?: string; timeout?: number; maxBuffer?: number } = {}
+): Promise<{ stdout: string; stderr: string }> {
+  return new Promise((resolve, reject) => {
+    execFile(file, args, options, (err, stdout, stderr) => {
+      if (err) {
+        const error = err as Error & { stdout: string; stderr: string };
+        error.stdout = stdout;
+        error.stderr = stderr;
+        reject(error);
+      } else {
+        resolve({ stdout: stdout ?? '', stderr: stderr ?? '' });
+      }
+    });
+  });
+}
 
 interface DevAgentInput {
   issueIid: number;
@@ -415,7 +431,7 @@ async function commitAndPush(
   issueIid: number,
   issueTitle: string,
   branchName: string
-): Promise<void> {
+): Promise<boolean> {
   await execFileAsync('git', ['config', '--local', 'user.email', 'agent@software-factory'], {
     cwd: workDir,
   });
@@ -427,7 +443,7 @@ async function commitAndPush(
   const statusResult = await execBash('git status --porcelain', workDir);
   if (!statusResult.stdout.trim()) {
     log.info('No changes to commit', { issueIid });
-    return;
+    return false;
   }
 
   await execFileAsync(
@@ -437,6 +453,92 @@ async function commitAndPush(
   );
   await execFileAsync('git', ['push', 'origin', branchName], { cwd: workDir });
   log.info('Code committed and pushed', { issueIid, branch: branchName });
+  return true;
+}
+
+async function generateMrDescription(
+  issue: IssueContext,
+  revisedPlan: string,
+  issueIid: number
+): Promise<string> {
+  const client = anthropicClient();
+  const { model } = devConfig();
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: 2048,
+    system: [
+      {
+        type: 'text',
+        text: 'You are a software engineer writing a Merge Request description. Be concise and informative.',
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
+    messages: [
+      {
+        role: 'user',
+        content: `Write a Merge Request description for the following user story implementation.
+
+The description MUST start with "Closes #${issueIid}" on the first line.
+Then include:
+- A short summary (2-4 sentences) of what was implemented
+- Key implementation choices and their justification
+
+## User Story
+**Title**: ${issue.title}
+
+**Acceptance Criteria**:
+${issue.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
+
+## Implementation Plan
+${revisedPlan}
+
+Output the MR description only, in Markdown format.`,
+      },
+    ],
+  });
+
+  return response.content
+    .filter((b): b is Anthropic.TextBlock => b.type === 'text')
+    .map((b) => b.text)
+    .join('\n');
+}
+
+async function createMergeRequest(
+  projectId: number,
+  issueIid: number,
+  issueTitle: string,
+  branchName: string,
+  description: string,
+  mcpGitlabUrl: string
+): Promise<void> {
+  const mcpClient = new Client({ name: 'agent-worker', version: '0.1.0' });
+  const transport = new StreamableHTTPClientTransport(new URL(mcpGitlabUrl));
+  await mcpClient.connect(transport);
+  try {
+    type ToolContent = { type: string; text?: string };
+    type ToolResult = { content: ToolContent[]; isError?: boolean };
+    const result = (await mcpClient.callTool({
+      name: 'gitlab_create_mr',
+      arguments: {
+        project_id: String(projectId),
+        source_branch: branchName,
+        target_branch: 'main',
+        title: issueTitle,
+        description,
+      },
+    })) as ToolResult;
+    if (result.isError) {
+      const text = result.content.find((c) => c.type === 'text')?.text ?? '';
+      log.warn('Failed to create MR', { issueIid, error: text });
+    } else {
+      const text = result.content.find((c) => c.type === 'text')?.text ?? '';
+      const data = JSON.parse(text) as { iid: number; web_url: string };
+      log.info('MR created', { issueIid, mrIid: data.iid, url: data.web_url });
+    }
+  } finally {
+    await mcpClient.close();
+  }
 }
 
 export async function runDevAgent(input: DevAgentInput): Promise<void> {
@@ -491,7 +593,22 @@ export async function runDevAgent(input: DevAgentInput): Promise<void> {
     await verifyImplementation(ctx.issue, workDir);
 
     log.info('Committing and pushing', { issueIid: input.issueIid });
-    await commitAndPush(workDir, input.issueIid, ctx.issue.title, branchName);
+    const pushed = await commitAndPush(workDir, input.issueIid, ctx.issue.title, branchName);
+
+    if (pushed) {
+      log.info('Generating MR description', { issueIid: input.issueIid });
+      const mrDescription = await generateMrDescription(ctx.issue, revisedPlan, input.issueIid);
+
+      log.info('Creating Merge Request', { issueIid: input.issueIid });
+      await createMergeRequest(
+        input.projectId,
+        input.issueIid,
+        ctx.issue.title,
+        branchName,
+        mrDescription,
+        mcpGitlabUrl,
+      );
+    }
 
     log.info('Dev agent completed successfully', { issueIid: input.issueIid });
   } finally {
