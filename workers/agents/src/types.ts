@@ -14,3 +14,9 @@ export interface WorkspaceContext {
   workDir: string;
   issue: IssueContext;
 }
+
+export interface DevAgentOutput {
+  mrIid: number;
+  branchName: string;
+  projectId: number;
+}

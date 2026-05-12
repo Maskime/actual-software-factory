@@ -26,3 +26,16 @@ export const PIPELINE_STAGE = {
   suspended:         'suspended',
 } as const;
 export type PipelineStageValue = typeof PIPELINE_STAGE[keyof typeof PIPELINE_STAGE];
+
+export interface DevAgentOutput {
+  mrIid: number;
+  branchName: string;
+  projectId: number;
+}
+
+export interface ReviewAgentInput {
+  issueIid: number;
+  projectId: number;
+  mrIid: number;
+  branchName: string;
+}

@@ -133,12 +133,15 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
 
   await applyLabel(L.dev);
   log.info('Starting dev agent', { issueIid: iid, projectId: pid });
-  await withSuspendOnFailure(ctx, 'dev', PIPELINE_STAGE.dev, () => runDevAgent(input));
+  const devOutput = await withSuspendOnFailure(ctx, 'dev', PIPELINE_STAGE.dev, () => runDevAgent(input));
+  log.info('Dev agent completed', { mrIid: devOutput.mrIid, branchName: devOutput.branchName });
 
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.review }]);
   await applyLabel(L.review, L.dev);
   log.info('Starting review agent', { issueIid: iid });
-  await withSuspendOnFailure(ctx, 'review', PIPELINE_STAGE.review, () => runReviewAgent(input));
+  await withSuspendOnFailure(ctx, 'review', PIPELINE_STAGE.review, () =>
+    runReviewAgent({ ...input, mrIid: devOutput.mrIid, branchName: devOutput.branchName })
+  );
 
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.fix }]);
   await applyLabel(L.fix, L.review);

@@ -7,7 +7,7 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import { setupWorkspace } from './setupWorkspace.js';
 import { AGENT_TOOLS, executeTool } from '../tools.js';
-import type { IssueContext, WorkspaceContext } from '../types.js';
+import type { DevAgentOutput, IssueContext, WorkspaceContext } from '../types.js';
 import { slugify } from '../utils.js';
 
 function execFileAsync(
@@ -511,7 +511,7 @@ async function createMergeRequest(
   branchName: string,
   description: string,
   mcpGitlabUrl: string
-): Promise<void> {
+): Promise<{ iid: number; web_url: string }> {
   const mcpClient = new Client({ name: 'agent-worker', version: '0.1.0' });
   const transport = new StreamableHTTPClientTransport(new URL(mcpGitlabUrl));
   await mcpClient.connect(transport);
@@ -530,18 +530,18 @@ async function createMergeRequest(
     })) as ToolResult;
     if (result.isError) {
       const text = result.content.find((c) => c.type === 'text')?.text ?? '';
-      log.warn('Failed to create MR', { issueIid, error: text });
-    } else {
-      const text = result.content.find((c) => c.type === 'text')?.text ?? '';
-      const data = JSON.parse(text) as { iid: number; web_url: string };
-      log.info('MR created', { issueIid, mrIid: data.iid, url: data.web_url });
+      throw ApplicationFailure.nonRetryable(`MR creation failed: ${text}`, 'MrCreationError');
     }
+    const text = result.content.find((c) => c.type === 'text')?.text ?? '';
+    const data = JSON.parse(text) as { iid: number; web_url: string };
+    log.info('MR created', { issueIid, mrIid: data.iid, url: data.web_url });
+    return data;
   } finally {
     await mcpClient.close();
   }
 }
 
-export async function runDevAgent(input: DevAgentInput): Promise<void> {
+export async function runDevAgent(input: DevAgentInput): Promise<DevAgentOutput> {
   const info = activityInfo();
   const workflowRunId = info.workflowExecution?.runId ?? info.activityId;
   const workDir = `/tmp/factory/${workflowRunId}`;
@@ -595,22 +595,28 @@ export async function runDevAgent(input: DevAgentInput): Promise<void> {
     log.info('Committing and pushing', { issueIid: input.issueIid });
     const pushed = await commitAndPush(workDir, input.issueIid, ctx.issue.title, branchName);
 
-    if (pushed) {
-      log.info('Generating MR description', { issueIid: input.issueIid });
-      const mrDescription = await generateMrDescription(ctx.issue, revisedPlan, input.issueIid);
-
-      log.info('Creating Merge Request', { issueIid: input.issueIid });
-      await createMergeRequest(
-        input.projectId,
-        input.issueIid,
-        ctx.issue.title,
-        branchName,
-        mrDescription,
-        mcpGitlabUrl,
+    if (!pushed) {
+      throw ApplicationFailure.nonRetryable(
+        'No changes to commit after implementation',
+        'EmptyImplementationError'
       );
     }
 
+    log.info('Generating MR description', { issueIid: input.issueIid });
+    const mrDescription = await generateMrDescription(ctx.issue, revisedPlan, input.issueIid);
+
+    log.info('Creating Merge Request', { issueIid: input.issueIid });
+    const mrData = await createMergeRequest(
+      input.projectId,
+      input.issueIid,
+      ctx.issue.title,
+      branchName,
+      mrDescription,
+      mcpGitlabUrl,
+    );
+
     log.info('Dev agent completed successfully', { issueIid: input.issueIid });
+    return { mrIid: mrData.iid, branchName, projectId: input.projectId };
   } finally {
     if (ctx && existsSync(workDir)) {
       try {
