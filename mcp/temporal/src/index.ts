@@ -33,7 +33,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
 
-  const app = createMcpExpressApp();
+  const app = createMcpExpressApp({ host: '0.0.0.0' });
 
   app.post("/mcp", async (req, res) => {
     const server = buildMcpServer(tc);
