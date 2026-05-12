@@ -119,10 +119,11 @@ describe('runDevAgent — happy path', () => {
       makeTextResponse('Step 1: create foo.ts'),  // generatePlan
       makeCritiqueResponse(),                       // critiquePlan: no issues
       makeTextResponse('Done implementing'),        // implementPlan
-      makeTextResponse('Done fixing'),              // verifyImplementation fix (not called)
+      makeTextResponse('Closes #42\n\nSummary.'),  // generateMrDescription
     );
 
-    await expect(runDevAgent({ issueIid: 42, projectId: 3 })).resolves.toBeUndefined();
+    const result = await runDevAgent({ issueIid: 42, projectId: 3 });
+    expect(result).toMatchObject({ mrIid: 1, branchName: expect.stringContaining('feature/'), projectId: 3 });
 
     vi.mocked(rm).mock.calls.length > 0 &&
       expect(vi.mocked(rm)).toHaveBeenCalledWith(WORK_DIR, expect.any(Object));
@@ -135,6 +136,7 @@ describe('runDevAgent — workspace cleanup', () => {
       makeTextResponse('plan'),
       makeCritiqueResponse(),
       makeTextResponse('done'),
+      makeTextResponse('Closes #1\n\nSummary.'),
     );
     await runDevAgent({ issueIid: 1, projectId: 3 });
     expect(vi.mocked(rm)).toHaveBeenCalledWith(WORK_DIR, { recursive: true, force: true });
@@ -148,6 +150,7 @@ describe('runDevAgent — retry path', () => {
       makeTextResponse('plan'),
       makeCritiqueResponse(),
       makeTextResponse('done'),
+      makeTextResponse('Closes #2\n\nSummary.'),
     );
     // existsSync returns true → isRetry = true
     vi.mocked(existsSync).mockReturnValue(true);
@@ -170,14 +173,20 @@ describe('runDevAgent — branch already exists', () => {
         if (command.includes('git branch --show-current')) return cb(null, 'main', '');
         // branch exists → checkout without -b
         if (command.includes('git branch --list')) return cb(null, '  feature/5-test-issue', '');
-        if (command.includes('git status --porcelain')) return cb(null, '', '');
+        if (command.includes('git status --porcelain')) return cb(null, 'M src/foo.ts\n', '');
         return cb(null, '', '');
       }
       return cb(null, '', '');
     }) as unknown as typeof execFile);
 
-    buildAnthropicMock(makeTextResponse('plan'), makeCritiqueResponse(), makeTextResponse('done'));
-    await expect(runDevAgent({ issueIid: 5, projectId: 3 })).resolves.toBeUndefined();
+    buildAnthropicMock(
+      makeTextResponse('plan'),
+      makeCritiqueResponse(),
+      makeTextResponse('done'),
+      makeTextResponse('Closes #5\n\nSummary.'),
+    );
+    const result = await runDevAgent({ issueIid: 5, projectId: 3 });
+    expect(result).toMatchObject({ mrIid: 1, branchName: expect.stringContaining('feature/'), projectId: 3 });
   });
 });
 
@@ -188,8 +197,9 @@ describe('runDevAgent — critique JSON parse failure', () => {
       makeTextResponse('plan'),
       makeTextResponse('This is NOT valid JSON {{{{'),  // critiquePlan returns bad JSON
       makeTextResponse('done'),
+      makeTextResponse('Closes #7\n\nSummary.'),
     );
-    await expect(runDevAgent({ issueIid: 7, projectId: 3 })).resolves.toBeUndefined();
+    await expect(runDevAgent({ issueIid: 7, projectId: 3 })).resolves.toMatchObject({ mrIid: 1 });
     expect(vi.mocked(log.warn)).toHaveBeenCalledWith(
       'Critique JSON parse failed — continuing with empty critique',
       expect.any(Object)
@@ -206,9 +216,10 @@ describe('runDevAgent — grave critique items', () => {
       makeTextResponse('done'),                       // implementPlan
       makeTextResponse('Closes #8\n\nSummary.'),      // generateMrDescription
     );
-    await runDevAgent({ issueIid: 8, projectId: 3 });
+    const result = await runDevAgent({ issueIid: 8, projectId: 3 });
     // generatePlan + critiquePlan + revisePlan + implementPlan + generateMrDescription = 5 calls
     expect(mockCreate).toHaveBeenCalledTimes(5);
+    expect(result).toMatchObject({ mrIid: 1, projectId: 3 });
   });
 });
 
@@ -238,18 +249,19 @@ describe('runDevAgent — moderate critique items', () => {
       makeTextResponse('done'),                             // implementPlan
       makeTextResponse('Closes #9\n\nSummary.'),            // generateMrDescription
     );
-    await runDevAgent({ issueIid: 9, projectId: 3 });
+    const result = await runDevAgent({ issueIid: 9, projectId: 3 });
     expect(mockMcpCallTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'gitlab_create_issue' })
     );
     expect(mockMcpCallTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'gitlab_create_mr' })
     );
+    expect(result).toMatchObject({ mrIid: 1, projectId: 3 });
   });
 });
 
 describe('runDevAgent — no changes to commit', () => {
-  it('skips git commit and MR creation when status is empty', async () => {
+  it('throws EmptyImplementationError when status is empty', async () => {
     vi.mocked(execFile).mockImplementation(
       buildExecFileMock('') as unknown as typeof execFile
     );
@@ -259,12 +271,9 @@ describe('runDevAgent — no changes to commit', () => {
         ({ connect: vi.fn(), callTool: mockCallTool, close: vi.fn() }) as unknown as InstanceType<typeof Client>
     );
     buildAnthropicMock(makeTextResponse('plan'), makeCritiqueResponse(), makeTextResponse('done'));
-    const { log } = await import('@temporalio/activity');
-    await runDevAgent({ issueIid: 10, projectId: 3 });
-    expect(vi.mocked(log.info)).toHaveBeenCalledWith(
-      'No changes to commit',
-      expect.any(Object)
-    );
+    await expect(runDevAgent({ issueIid: 10, projectId: 3 })).rejects.toMatchObject({
+      type: 'EmptyImplementationError',
+    });
     expect(mockCallTool).not.toHaveBeenCalledWith(
       expect.objectContaining({ name: 'gitlab_create_mr' })
     );
@@ -306,7 +315,7 @@ describe('runDevAgent — verification failure then success', () => {
       makeTextResponse('fixed'),   // fixErrors (called by verifyImplementation)
     );
 
-    await expect(runDevAgent({ issueIid: 11, projectId: 3 })).resolves.toBeUndefined();
+    await expect(runDevAgent({ issueIid: 11, projectId: 3 })).resolves.toMatchObject({ mrIid: 1, projectId: 3 });
   });
 });
 
@@ -337,7 +346,7 @@ describe('runDevAgent — tool use in implementPlan', () => {
       makeTextResponse('done'),
     );
 
-    await expect(runDevAgent({ issueIid: 12, projectId: 3 })).resolves.toBeUndefined();
+    await expect(runDevAgent({ issueIid: 12, projectId: 3 })).resolves.toMatchObject({ mrIid: 1, projectId: 3 });
     expect(vi.mocked(mockedExecuteTool)).toHaveBeenCalledWith(
       'read_file',
       { path: 'src/foo.ts' },
@@ -347,7 +356,7 @@ describe('runDevAgent — tool use in implementPlan', () => {
 });
 
 describe('runDevAgent — MR creation', () => {
-  it('calls gitlab_create_mr via MCP with correct args after commit and push', async () => {
+  it('calls gitlab_create_mr via MCP with correct args and returns mrIid', async () => {
     const mockCallTool = vi.fn().mockResolvedValue({
       content: [{ type: 'text', text: '{"iid":55,"web_url":"http://gitlab/mr/55"}' }],
       isError: false,
@@ -364,7 +373,7 @@ describe('runDevAgent — MR creation', () => {
       makeTextResponse('Closes #42\n\nSummary.'),       // generateMrDescription
     );
 
-    await runDevAgent({ issueIid: 42, projectId: 3 });
+    const result = await runDevAgent({ issueIid: 42, projectId: 3 });
 
     const mrCall = mockCallTool.mock.calls.find(
       (c: unknown[]) => (c[0] as { name: string }).name === 'gitlab_create_mr'
@@ -378,9 +387,10 @@ describe('runDevAgent — MR creation', () => {
         description: expect.stringContaining('Closes #42'),
       }),
     });
+    expect(result).toMatchObject({ mrIid: 55, projectId: 3 });
   });
 
-  it('logs a warning and does not throw when MR creation fails', async () => {
+  it('throws MrCreationError when MR creation fails', async () => {
     const mockCallTool = vi.fn().mockResolvedValue({
       content: [{ type: 'text', text: '{"error":"already exists"}' }],
       isError: true,
@@ -397,11 +407,8 @@ describe('runDevAgent — MR creation', () => {
       makeTextResponse('Closes #13\n\nSummary.'),
     );
 
-    const { log } = await import('@temporalio/activity');
-    await expect(runDevAgent({ issueIid: 13, projectId: 3 })).resolves.toBeUndefined();
-    expect(vi.mocked(log.warn)).toHaveBeenCalledWith(
-      'Failed to create MR',
-      expect.objectContaining({ issueIid: 13 })
-    );
+    await expect(runDevAgent({ issueIid: 13, projectId: 3 })).rejects.toMatchObject({
+      type: 'MrCreationError',
+    });
   });
 });
