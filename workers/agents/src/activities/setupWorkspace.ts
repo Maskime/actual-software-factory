@@ -1,5 +1,6 @@
 import { ApplicationFailure } from '@temporalio/activity';
 import { execFile } from 'node:child_process';
+import { existsSync } from 'node:fs';
 import { promisify } from 'node:util';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
@@ -88,10 +89,15 @@ export async function setupWorkspace(input: AgentInput): Promise<WorkspaceContex
     token
   );
   const cloneUrl = new URL(project.http_url_to_repo);
+  const internalGitlab = new URL(gitlabApiUrl);
+  cloneUrl.hostname = internalGitlab.hostname;
+  cloneUrl.port = internalGitlab.port;
   cloneUrl.username = 'oauth2';
   cloneUrl.password = token;
 
-  await execFileAsync('git', ['clone', '--depth=1', cloneUrl.toString(), workDir]);
+  if (!existsSync(workDir)) {
+    await execFileAsync('git', ['clone', '--depth=1', cloneUrl.toString(), workDir]);
+  }
 
   const { title, description } = await readIssueViaMcp(
     mcpGitlabUrl,

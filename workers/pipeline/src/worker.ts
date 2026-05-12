@@ -40,7 +40,7 @@ const connection = await NativeConnection.connect({ address: ADDRESS });
 const worker = await Worker.create({
   connection,
   namespace: NAMESPACE,
-  workflowsPath: fileURLToPath(new URL('./workflow.js', import.meta.url)),
+  workflowsPath: fileURLToPath(new URL(import.meta.url.endsWith('.ts') ? './workflow.ts' : './workflow.js', import.meta.url)),
   activities: { ...gitlabActivities },
   taskQueue: TASK_QUEUE,
   bundlerOptions: {
