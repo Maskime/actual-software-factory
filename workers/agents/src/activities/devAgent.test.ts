@@ -100,6 +100,17 @@ beforeEach(() => {
   process.env.MCP_GITLAB_URL = 'http://mcp-gitlab:3000/mcp'; // NOSONAR
   vi.mocked(execFile).mockImplementation(buildExecFileMock() as unknown as typeof execFile);
   vi.mocked(existsSync).mockReturnValue(true); // workspace exists after setup
+  vi.mocked(Client).mockImplementation(
+    () =>
+      ({
+        connect: vi.fn(),
+        callTool: vi.fn().mockResolvedValue({
+          content: [{ type: 'text', text: '{"iid":1,"web_url":"http://gitlab/mr/1"}' }],
+          isError: false,
+        }),
+        close: vi.fn(),
+      }) as unknown as InstanceType<typeof Client>
+  );
 });
 
 describe('runDevAgent — happy path', () => {
@@ -193,19 +204,25 @@ describe('runDevAgent — grave critique items', () => {
       makeCritiqueResponse(['Missing auth check']),   // 1 grave item
       makeTextResponse('revised plan'),               // revisePlan
       makeTextResponse('done'),                       // implementPlan
+      makeTextResponse('Closes #8\n\nSummary.'),      // generateMrDescription
     );
     await runDevAgent({ issueIid: 8, projectId: 3 });
-    // generatePlan + critiquePlan + revisePlan + implementPlan = 4 calls
-    expect(mockCreate).toHaveBeenCalledTimes(4);
+    // generatePlan + critiquePlan + revisePlan + implementPlan + generateMrDescription = 5 calls
+    expect(mockCreate).toHaveBeenCalledTimes(5);
   });
 });
 
 describe('runDevAgent — moderate critique items', () => {
-  it('creates a GitLab backlog issue for each moderate item', async () => {
-    const mockMcpCallTool = vi.fn().mockResolvedValue({
-      content: [{ type: 'text', text: '{"iid":99}' }],
-      isError: false,
-    });
+  it('creates a GitLab backlog issue for each moderate item and a MR after push', async () => {
+    const mockMcpCallTool = vi.fn()
+      .mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"iid":99}' }],
+        isError: false,
+      })
+      .mockResolvedValueOnce({
+        content: [{ type: 'text', text: '{"iid":1,"web_url":"http://gitlab/mr/1"}' }],
+        isError: false,
+      });
     vi.mocked(Client).mockImplementation(
       () =>
         ({
@@ -217,20 +234,29 @@ describe('runDevAgent — moderate critique items', () => {
 
     buildAnthropicMock(
       makeTextResponse('plan'),
-      makeCritiqueResponse([], ['Need more tests']),  // 1 moderate item
-      makeTextResponse('done'),
+      makeCritiqueResponse([], ['Need more tests']),        // 1 moderate item
+      makeTextResponse('done'),                             // implementPlan
+      makeTextResponse('Closes #9\n\nSummary.'),            // generateMrDescription
     );
     await runDevAgent({ issueIid: 9, projectId: 3 });
     expect(mockMcpCallTool).toHaveBeenCalledWith(
       expect.objectContaining({ name: 'gitlab_create_issue' })
     );
+    expect(mockMcpCallTool).toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'gitlab_create_mr' })
+    );
   });
 });
 
 describe('runDevAgent — no changes to commit', () => {
-  it('skips git commit when status is empty', async () => {
+  it('skips git commit and MR creation when status is empty', async () => {
     vi.mocked(execFile).mockImplementation(
       buildExecFileMock('') as unknown as typeof execFile
+    );
+    const mockCallTool = vi.fn();
+    vi.mocked(Client).mockImplementation(
+      () =>
+        ({ connect: vi.fn(), callTool: mockCallTool, close: vi.fn() }) as unknown as InstanceType<typeof Client>
     );
     buildAnthropicMock(makeTextResponse('plan'), makeCritiqueResponse(), makeTextResponse('done'));
     const { log } = await import('@temporalio/activity');
@@ -238,6 +264,9 @@ describe('runDevAgent — no changes to commit', () => {
     expect(vi.mocked(log.info)).toHaveBeenCalledWith(
       'No changes to commit',
       expect.any(Object)
+    );
+    expect(mockCallTool).not.toHaveBeenCalledWith(
+      expect.objectContaining({ name: 'gitlab_create_mr' })
     );
   });
 });
@@ -313,6 +342,66 @@ describe('runDevAgent — tool use in implementPlan', () => {
       'read_file',
       { path: 'src/foo.ts' },
       WORK_DIR
+    );
+  });
+});
+
+describe('runDevAgent — MR creation', () => {
+  it('calls gitlab_create_mr via MCP with correct args after commit and push', async () => {
+    const mockCallTool = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: '{"iid":55,"web_url":"http://gitlab/mr/55"}' }],
+      isError: false,
+    });
+    vi.mocked(Client).mockImplementation(
+      () =>
+        ({ connect: vi.fn(), callTool: mockCallTool, close: vi.fn() }) as unknown as InstanceType<typeof Client>
+    );
+
+    buildAnthropicMock(
+      makeTextResponse('plan'),
+      makeCritiqueResponse(),
+      makeTextResponse('done'),                         // implementPlan
+      makeTextResponse('Closes #42\n\nSummary.'),       // generateMrDescription
+    );
+
+    await runDevAgent({ issueIid: 42, projectId: 3 });
+
+    const mrCall = mockCallTool.mock.calls.find(
+      (c: unknown[]) => (c[0] as { name: string }).name === 'gitlab_create_mr'
+    );
+    expect(mrCall).toBeDefined();
+    expect(mrCall![0]).toMatchObject({
+      name: 'gitlab_create_mr',
+      arguments: expect.objectContaining({
+        source_branch: expect.stringContaining('42'),
+        target_branch: 'main',
+        description: expect.stringContaining('Closes #42'),
+      }),
+    });
+  });
+
+  it('logs a warning and does not throw when MR creation fails', async () => {
+    const mockCallTool = vi.fn().mockResolvedValue({
+      content: [{ type: 'text', text: '{"error":"already exists"}' }],
+      isError: true,
+    });
+    vi.mocked(Client).mockImplementation(
+      () =>
+        ({ connect: vi.fn(), callTool: mockCallTool, close: vi.fn() }) as unknown as InstanceType<typeof Client>
+    );
+
+    buildAnthropicMock(
+      makeTextResponse('plan'),
+      makeCritiqueResponse(),
+      makeTextResponse('done'),
+      makeTextResponse('Closes #13\n\nSummary.'),
+    );
+
+    const { log } = await import('@temporalio/activity');
+    await expect(runDevAgent({ issueIid: 13, projectId: 3 })).resolves.toBeUndefined();
+    expect(vi.mocked(log.warn)).toHaveBeenCalledWith(
+      'Failed to create MR',
+      expect.objectContaining({ issueIid: 13 })
     );
   });
 });
