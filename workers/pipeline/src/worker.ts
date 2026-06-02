@@ -1,11 +1,15 @@
 import { Worker, NativeConnection } from '@temporalio/worker';
+import { createHealthServer } from '@factory/worker-shared';
 import { fileURLToPath } from 'node:url';
 import webpack from 'webpack';
 import * as gitlabActivities from './activities/gitlab.js';
 
-const TASK_QUEUE = process.env.TEMPORAL_TASK_QUEUE ?? 'factory-pipeline';
-const NAMESPACE  = process.env.TEMPORAL_NAMESPACE  ?? 'factory';
-const ADDRESS    = process.env.TEMPORAL_ADDRESS    ?? 'localhost:7233';
+const TASK_QUEUE   = process.env.TEMPORAL_TASK_QUEUE ?? 'factory-pipeline';
+const NAMESPACE    = process.env.TEMPORAL_NAMESPACE  ?? 'factory';
+const ADDRESS      = process.env.TEMPORAL_ADDRESS    ?? 'localhost:7233';
+const HEALTH_PORT  = Number.parseInt(process.env.HEALTH_PORT ?? '9091', 10);
+
+const healthServer = createHealthServer(HEALTH_PORT);
 
 // Activity config env vars are read here (worker process) and injected as
 // compile-time string constants into the workflow bundle via DefinePlugin,
@@ -51,8 +55,8 @@ const worker = await Worker.create({
   },
 });
 
-process.on('SIGTERM', () => worker.shutdown());
-process.on('SIGINT',  () => worker.shutdown());
+process.on('SIGTERM', () => { healthServer.close(); worker.shutdown(); });
+process.on('SIGINT',  () => { healthServer.close(); worker.shutdown(); });
 
 process.stderr.write(
   `[pipeline-worker] Started (namespace="${NAMESPACE}", taskQueue="${TASK_QUEUE}", address="${ADDRESS}")\n`
