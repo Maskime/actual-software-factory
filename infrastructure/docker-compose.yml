@@ -266,6 +266,13 @@ services:
       GITLAB_API_TOKEN: "${GITLAB_API_TOKEN}"
       HUMAN_IN_THE_LOOP: "${HUMAN_IN_THE_LOOP:-false}"
       HUMAN_IN_THE_LOOP_TIMEOUT: "${HUMAN_IN_THE_LOOP_TIMEOUT:-24 hours}"
+      HEALTH_PORT: "9091"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:9091/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - factory-network
     depends_on:
@@ -294,6 +301,13 @@ services:
       MCP_GITLAB_INTERNAL_URL: "http://mcp-gitlab:3000/mcp"
       MCP_TEMPORAL_INTERNAL_URL: "http://mcp-temporal:3000/mcp"
       MCP_SONARQUBE_INTERNAL_URL: "http://mcp-sonarqube:3000/mcp"
+      HEALTH_PORT: "9090"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:9090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     networks:
       - factory-network
     depends_on:
