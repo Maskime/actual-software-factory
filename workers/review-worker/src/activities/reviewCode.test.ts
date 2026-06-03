@@ -92,18 +92,20 @@ describe('reviewCode', () => {
     delete process.env.ANTHROPIC_API_KEY;
   });
 
-  it('returns ReviewComment[] when diff is non-empty', async () => {
+  it('returns ReviewAgentOutput when diff is non-empty', async () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
     mockCallTool
       .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
-      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE));
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))  // inline comment
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 })); // summary
     mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse([COMMENT_FIXTURE]));
 
     const result = await reviewCode(INPUT);
 
-    expect(Array.isArray(result)).toBe(true);
-    expect(result).toHaveLength(1);
-    expect(result[0]).toMatchObject({
+    expect(result).toHaveProperty('comments');
+    expect(result.comments).toHaveLength(1);
+    expect(result.comments[0]).toMatchObject({
       file: 'src/foo.ts',
       line: 1,
       description: expect.any(String),
@@ -115,7 +117,9 @@ describe('reviewCode', () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
     mockCallTool
       .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
-      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE));
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }));
     mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse([COMMENT_FIXTURE]));
 
     await reviewCode(INPUT);
@@ -134,7 +138,8 @@ describe('reviewCode', () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
     mockCallTool
       .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
-      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE));
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 })); // summary only (no comments)
     mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse([]));
 
     await reviewCode(INPUT);
@@ -161,12 +166,13 @@ describe('reviewCode', () => {
     };
     mockCallTool
       .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
-      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE));
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 })); // summary only
     mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse([fileLevelComment]));
 
     const result = await reviewCode(INPUT);
 
-    expect(result[0].line).toBeNull();
+    expect(result.comments[0].line).toBeNull();
   });
 
   it('returns comments with valid classification values only', async () => {
@@ -178,13 +184,17 @@ describe('reviewCode', () => {
     ];
     mockCallTool
       .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
-      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE));
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 3 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 4 })); // summary
     mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
 
     const result = await reviewCode(INPUT);
 
     const validClassifications = ['bloquant', 'modéré', 'esthétique'];
-    for (const comment of result) {
+    for (const comment of result.comments) {
       expect(validClassifications).toContain(comment.classification);
     }
   });
@@ -222,5 +232,143 @@ describe('reviewCode', () => {
     const err = await reviewCode(INPUT).catch((e: unknown) => e) as Error & { type: string };
     expect(err).toBeInstanceOf(Error);
     expect(err.type).toBe('McpToolError');
+  });
+
+  // --- US-4 tests ---
+
+  it('posts an inline comment for each comment with a non-null line', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const comments: ReviewComment[] = [
+      { file: 'src/a.ts', line: 10, description: 'Bug here', classification: 'bloquant' },
+      { file: 'src/b.ts', line: 5,  description: 'Style issue', classification: 'esthétique' },
+    ];
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 3 }));
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
+
+    await reviewCode(INPUT);
+
+    expect(mockCallTool).toHaveBeenNthCalledWith(3,
+      expect.objectContaining({
+        name: 'gitlab_add_mr_inline_comment',
+        arguments: expect.objectContaining({
+          file_path: 'src/a.ts',
+          new_line: 10,
+          body: expect.stringContaining('[BLOQUANT]'),
+        }),
+      }),
+    );
+    expect(mockCallTool).toHaveBeenNthCalledWith(4,
+      expect.objectContaining({
+        name: 'gitlab_add_mr_inline_comment',
+        arguments: expect.objectContaining({
+          file_path: 'src/b.ts',
+          new_line: 5,
+          body: expect.stringContaining('[ESTHÉTIQUE]'),
+        }),
+      }),
+    );
+  });
+
+  it('skips inline posting for comments with line null and includes them in summary', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const fileLevel: ReviewComment = {
+      file: 'src/a.ts',
+      line: null,
+      description: 'No tests written',
+      classification: 'modéré',
+    };
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }));
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse([fileLevel]));
+
+    await reviewCode(INPUT);
+
+    expect(mockCallTool).toHaveBeenCalledTimes(3);
+    expect(mockCallTool).toHaveBeenNthCalledWith(3,
+      expect.objectContaining({
+        name: 'gitlab_add_mr_comment',
+        arguments: expect.objectContaining({
+          body: expect.stringContaining('No tests written'),
+        }),
+      }),
+    );
+  });
+
+  it('logs a warning and continues when an inline comment fails', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const comments: ReviewComment[] = [
+      { file: 'src/a.ts', line: 999, description: 'Bug', classification: 'bloquant' },
+      { file: 'src/b.ts', line: 5,   description: 'Style', classification: 'esthétique' },
+    ];
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'line not in diff' }], isError: true })
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 3 }));
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
+
+    const result = await reviewCode(INPUT);
+
+    const { log } = await import('@temporalio/activity');
+    expect(log.warn).toHaveBeenCalledWith(
+      'Failed to post inline comment',
+      expect.objectContaining({ file: 'src/a.ts', line: 999 }),
+    );
+    expect(result.comments).toHaveLength(2);
+  });
+
+  it('posts an empty summary even when there are no review comments', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }));
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse([]));
+
+    const result = await reviewCode(INPUT);
+
+    expect(result.comments).toHaveLength(0);
+    expect(mockCallTool).toHaveBeenNthCalledWith(3,
+      expect.objectContaining({ name: 'gitlab_add_mr_comment' }),
+    );
+  });
+
+  it('summary body contains a count table with correct totals and file-level comment', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const comments: ReviewComment[] = [
+      { file: 'a.ts', line: 1,    description: 'bug1',    classification: 'bloquant' },
+      { file: 'b.ts', line: 2,    description: 'bug2',    classification: 'bloquant' },
+      { file: 'c.ts', line: 3,    description: 'improve', classification: 'modéré' },
+      { file: 'd.ts', line: null, description: 'no tests', classification: 'esthétique' },
+    ];
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 3 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 4 }));
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
+
+    await reviewCode(INPUT);
+
+    const summaryCall = mockCallTool.mock.calls.at(-1)![0] as { name: string; arguments: { body: string } };
+    const body = summaryCall.arguments.body;
+    expect(body).toContain('[BLOQUANT]');
+    expect(body).toContain('[MODÉRÉ]');
+    expect(body).toContain('[ESTHÉTIQUE]');
+    expect(body).toContain('| [BLOQUANT] | 2 |');
+    expect(body).toContain('| [MODÉRÉ] | 1 |');
+    expect(body).toContain('| [ESTHÉTIQUE] | 1 |');
+    expect(body).toContain('d.ts');
+    expect(body).toContain('no tests');
   });
 });

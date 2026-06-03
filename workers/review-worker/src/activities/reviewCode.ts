@@ -32,6 +32,10 @@ export interface ReviewComment {
   classification: 'bloquant' | 'modéré' | 'esthétique';
 }
 
+export interface ReviewAgentOutput {
+  comments: ReviewComment[];
+}
+
 type McpContent = { type: string; text?: string };
 type McpToolResult = { content: McpContent[]; isError?: boolean };
 
@@ -41,6 +45,12 @@ const GENERATED_FILE_PATTERNS = [
   /\.min\.js$/,
   /\.min\.css$/,
 ];
+
+function classificationPrefix(c: ReviewComment['classification']): string {
+  if (c === 'bloquant') return '[BLOQUANT]';
+  if (c === 'modéré')   return '[MODÉRÉ]';
+  return '[ESTHÉTIQUE]';
+}
 
 function isGeneratedFile(path: string): boolean {
   return GENERATED_FILE_PATTERNS.some((p) =>
@@ -81,6 +91,82 @@ async function callMcpTool(
   } finally {
     await client.close();
   }
+}
+
+async function postInlineComment(
+  mcpGitlabUrl: string,
+  projectId: number,
+  mrIid: number,
+  comment: ReviewComment & { line: number },
+): Promise<void> {
+  const body = `${classificationPrefix(comment.classification)} ${comment.description}`;
+  try {
+    await callMcpTool(mcpGitlabUrl, 'gitlab_add_mr_inline_comment', {
+      project_id: String(projectId),
+      mr_iid: mrIid,
+      body,
+      file_path: comment.file,
+      new_line: comment.line,
+    });
+  } catch (error) {
+    log.warn('Failed to post inline comment', { file: comment.file, line: comment.line, error });
+  }
+}
+
+function buildSummaryBody(comments: ReviewComment[]): string {
+  const bloquant   = comments.filter((c) => c.classification === 'bloquant').length;
+  const modere     = comments.filter((c) => c.classification === 'modéré').length;
+  const esthetique = comments.filter((c) => c.classification === 'esthétique').length;
+  const total      = comments.length;
+
+  const fileLevelComments = comments.filter((c) => c.line === null);
+
+  let body = `## Synthese de la revue de code
+
+| Classification | Nombre |
+|---|---|
+| [BLOQUANT] | ${bloquant} |
+| [MODÉRÉ] | ${modere} |
+| [ESTHÉTIQUE] | ${esthetique} |
+
+**Total : ${total} commentaire(s)**`;
+
+  if (fileLevelComments.length > 0) {
+    body += '\n\n## Commentaires generaux';
+    for (const c of fileLevelComments) {
+      body += `\n\n### ${c.file}\n\n${classificationPrefix(c.classification)} ${c.description}`;
+    }
+  }
+
+  return body;
+}
+
+async function postSummaryComment(
+  mcpGitlabUrl: string,
+  projectId: number,
+  mrIid: number,
+  comments: ReviewComment[],
+): Promise<void> {
+  const body = buildSummaryBody(comments);
+  await callMcpTool(mcpGitlabUrl, 'gitlab_add_mr_comment', {
+    project_id: String(projectId),
+    mr_iid: mrIid,
+    body,
+  });
+}
+
+async function publishComments(
+  mcpGitlabUrl: string,
+  projectId: number,
+  mrIid: number,
+  comments: ReviewComment[],
+): Promise<void> {
+  for (const comment of comments) {
+    if (comment.line !== null) {
+      await postInlineComment(mcpGitlabUrl, projectId, mrIid, comment as ReviewComment & { line: number });
+    }
+  }
+  await postSummaryComment(mcpGitlabUrl, projectId, mrIid, comments);
 }
 
 async function readMrDiff(
@@ -217,7 +303,7 @@ ${formattedDiff}`,
   return Array.isArray(input.comments) ? input.comments : [];
 }
 
-export async function reviewCode(input: ReviewCodeInput): Promise<ReviewComment[]> {
+export async function reviewCode(input: ReviewCodeInput): Promise<ReviewAgentOutput> {
   log.info('Review agent starting', {
     mrIid: input.mrIid,
     projectId: input.projectId,
@@ -249,11 +335,13 @@ export async function reviewCode(input: ReviewCodeInput): Promise<ReviewComment[
   const mrContext: MrContext = { title: metadata.title, description: metadata.description, diff };
   const comments = await analyzeWithClaude(client, anthropicModel, mrContext);
 
+  await publishComments(mcpGitlabUrl, input.projectId, input.mrIid, comments);
+
   log.info('Review completed', {
     mrIid: input.mrIid,
     total: comments.length,
     bloquant: comments.filter((c) => c.classification === 'bloquant').length,
   });
 
-  return comments;
+  return { comments };
 }
