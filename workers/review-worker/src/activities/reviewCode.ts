@@ -1,6 +1,7 @@
 import { ApplicationFailure, log } from '@temporalio/activity';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import Anthropic from '@anthropic-ai/sdk';
 
 export interface ReviewCodeInput {
   mrIid: number;
@@ -24,11 +25,42 @@ export interface MrContext {
   diff: MrFileChange[];
 }
 
+export interface ReviewComment {
+  file: string;
+  line: number | null;
+  description: string;
+  classification: 'bloquant' | 'modéré' | 'esthétique';
+}
+
 type McpContent = { type: string; text?: string };
 type McpToolResult = { content: McpContent[]; isError?: boolean };
 
-function reviewConfig(): { mcpGitlabUrl: string } {
-  return { mcpGitlabUrl: process.env.MCP_GITLAB_URL ?? 'http://mcp-gitlab:3000/mcp' }; // NOSONAR
+const GENERATED_FILE_PATTERNS = [
+  'package-lock.json',
+  'yarn.lock',
+  /\.min\.js$/,
+  /\.min\.css$/,
+];
+
+function isGeneratedFile(path: string): boolean {
+  return GENERATED_FILE_PATTERNS.some((p) =>
+    typeof p === 'string' ? path.endsWith(p) : p.test(path),
+  );
+}
+
+function reviewConfig(): { mcpGitlabUrl: string; anthropicModel: string } {
+  return {
+    mcpGitlabUrl:   process.env.MCP_GITLAB_URL  ?? 'http://mcp-gitlab:3000/mcp', // NOSONAR
+    anthropicModel: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
+  };
+}
+
+function anthropicClient(): Anthropic {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw ApplicationFailure.nonRetryable('ANTHROPIC_API_KEY is not set', 'MissingConfigError');
+  }
+  return new Anthropic({ apiKey });
 }
 
 async function callMcpTool(
@@ -76,7 +108,116 @@ async function readMrMetadata(
   return { title: mr.title, description: mr.description ?? '' };
 }
 
-export async function reviewCode(input: ReviewCodeInput): Promise<void> {
+const MAX_DIFF_LINES = 300;
+
+function formatDiff(diff: MrFileChange[]): string {
+  return diff
+    .filter((f) => !isGeneratedFile(f.new_path) && !isGeneratedFile(f.old_path))
+    .map((f) => {
+      let label = '';
+      if (f.new_file) label = ' [NEW FILE]';
+      else if (f.deleted_file) label = ' [DELETED]';
+      else if (f.renamed_file) label = ` [RENAMED from ${f.old_path}]`;
+
+      const lines = f.diff.split('\n');
+      const truncated = lines.length > MAX_DIFF_LINES;
+      const content = truncated
+        ? lines.slice(0, MAX_DIFF_LINES).join('\n') + '\n… [tronqué à 300 lignes]'
+        : f.diff;
+
+      return `### ${f.new_path}${label}\n\`\`\`diff\n${content}\n\`\`\``;
+    })
+    .join('\n\n');
+}
+
+const REVIEW_SYSTEM_PROMPT = `You are a senior code reviewer. Analyze the MR diff and produce a structured review.
+
+Classify each finding as:
+- bloquant: mandatory fix before merge — correctness bugs, security vulnerabilities (OWASP Top 10), breaking changes, data loss risks
+- modéré: important improvement, deferrable — code quality debt, missing error handling, minor security concerns
+- esthétique: style/convention only — naming, formatting, non-functional organization. No automatic action will be taken.
+
+Review criteria:
+1. Code quality: correctness, error handling, edge cases, performance
+2. Readability: naming clarity, function size, cognitive complexity
+3. Security (OWASP): injection, broken auth, sensitive data exposure, XSS, CSRF, insecure deserialization, vulnerable components
+4. Codebase consistency: existing patterns, naming conventions, architectural style
+
+Only report genuine issues. Call submit_review with all findings (empty array if none).`;
+
+const SUBMIT_REVIEW_TOOL: Anthropic.Tool = {
+  name: 'submit_review',
+  description: 'Submit the complete structured code review result',
+  input_schema: {
+    type: 'object',
+    properties: {
+      comments: {
+        type: 'array',
+        items: {
+          type: 'object',
+          properties: {
+            file:           { type: 'string', description: 'File path relative to repository root' },
+            line:           { type: ['integer', 'null'], description: 'Line number in the new version, or null for file-level comments' },
+            description:    { type: 'string', description: 'Description of the issue found' },
+            classification: {
+              type: 'string',
+              enum: ['bloquant', 'modéré', 'esthétique'],
+              description: 'Severity classification',
+            },
+          },
+          required: ['file', 'line', 'description', 'classification'],
+        },
+      },
+    },
+    required: ['comments'],
+  },
+};
+
+async function analyzeWithClaude(
+  client: Anthropic,
+  model: string,
+  mrContext: MrContext,
+): Promise<ReviewComment[]> {
+  const formattedDiff = formatDiff(mrContext.diff);
+  const descriptionSection = mrContext.description ? `\n\nDescription: ${mrContext.description}` : '';
+
+  const response = await client.messages.create({
+    model,
+    max_tokens: 4096,
+    system: [
+      {
+        type: 'text',
+        text: REVIEW_SYSTEM_PROMPT,
+        cache_control: { type: 'ephemeral' },
+      },
+    ],
+    tools: [SUBMIT_REVIEW_TOOL],
+    tool_choice: { type: 'tool', name: 'submit_review' },
+    messages: [
+      {
+        role: 'user',
+        content: `## MR: ${mrContext.title}${descriptionSection}
+
+## Diff
+
+${formattedDiff}`,
+      },
+    ],
+  });
+
+  const toolUse = response.content.find(
+    (b): b is Anthropic.ToolUseBlock => b.type === 'tool_use' && b.name === 'submit_review',
+  );
+  if (!toolUse) {
+    log.warn('Claude did not call submit_review — returning empty review');
+    return [];
+  }
+
+  const input = toolUse.input as { comments: ReviewComment[] };
+  return Array.isArray(input.comments) ? input.comments : [];
+}
+
+export async function reviewCode(input: ReviewCodeInput): Promise<ReviewComment[]> {
   log.info('Review agent starting', {
     mrIid: input.mrIid,
     projectId: input.projectId,
@@ -84,7 +225,7 @@ export async function reviewCode(input: ReviewCodeInput): Promise<void> {
     branchName: input.branchName,
   });
 
-  const { mcpGitlabUrl } = reviewConfig();
+  const { mcpGitlabUrl, anthropicModel } = reviewConfig();
 
   const [diff, metadata] = await Promise.all([
     readMrDiff(mcpGitlabUrl, input.projectId, input.mrIid),
@@ -103,4 +244,16 @@ export async function reviewCode(input: ReviewCodeInput): Promise<void> {
     filesChanged: diff.length,
     linkedIssueIid: input.issueIid,
   });
+
+  const client = anthropicClient();
+  const mrContext: MrContext = { title: metadata.title, description: metadata.description, diff };
+  const comments = await analyzeWithClaude(client, anthropicModel, mrContext);
+
+  log.info('Review completed', {
+    mrIid: input.mrIid,
+    total: comments.length,
+    bloquant: comments.filter((c) => c.classification === 'bloquant').length,
+  });
+
+  return comments;
 }

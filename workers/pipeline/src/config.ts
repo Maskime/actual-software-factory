@@ -43,7 +43,7 @@ export function reviewAgentActivityOptions(): ActivityOptions {
       maximumAttempts:        Number(process.env.AGENT_ACTIVITY_MAX_ATTEMPTS         ?? '3'),
       initialInterval:        process.env.AGENT_ACTIVITY_INITIAL_INTERVAL            ?? '30s',
       backoffCoefficient:     Number(process.env.AGENT_ACTIVITY_BACKOFF_COEFFICIENT  ?? '2'),
-      nonRetryableErrorTypes: ['MaxIterationsError'],
+      nonRetryableErrorTypes: ['MaxIterationsError', 'MissingConfigError', 'EmptyDiffError'],
     },
   };
 }

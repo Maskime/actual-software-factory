@@ -142,9 +142,13 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.review }]);
   await applyLabel(L.review, L.dev);
   log.info('Starting review agent', { issueIid: iid });
-  await withSuspendOnFailure(ctx, 'review', PIPELINE_STAGE.review, () =>
+  const reviewOutput = await withSuspendOnFailure(ctx, 'review', PIPELINE_STAGE.review, () =>
     reviewCode({ ...input, mrIid: devOutput.mrIid, branchName: devOutput.branchName })
   );
+  log.info('Review agent completed', {
+    commentsCount: reviewOutput.comments.length,
+    blocking: reviewOutput.comments.filter((c) => c.classification === 'bloquant').length,
+  });
 
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.fix }]);
   await applyLabel(L.fix, L.review);
