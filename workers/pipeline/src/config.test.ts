@@ -125,6 +125,14 @@ describe('reviewAgentActivityOptions', () => {
   it('includes MaxIterationsError in nonRetryableErrorTypes', () => {
     expect(reviewAgentActivityOptions().retry?.nonRetryableErrorTypes).toContain('MaxIterationsError')
   })
+
+  it('includes MissingConfigError in nonRetryableErrorTypes', () => {
+    expect(reviewAgentActivityOptions().retry?.nonRetryableErrorTypes).toContain('MissingConfigError')
+  })
+
+  it('includes EmptyDiffError in nonRetryableErrorTypes', () => {
+    expect(reviewAgentActivityOptions().retry?.nonRetryableErrorTypes).toContain('EmptyDiffError')
+  })
 })
 
 describe('humanInTheLoopConfig', () => {
