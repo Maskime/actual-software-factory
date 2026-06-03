@@ -31,28 +31,36 @@ function reviewConfig(): { mcpGitlabUrl: string } {
   return { mcpGitlabUrl: process.env.MCP_GITLAB_URL ?? 'http://mcp-gitlab:3000/mcp' }; // NOSONAR
 }
 
+async function callMcpTool(
+  mcpGitlabUrl: string,
+  toolName: string,
+  args: Record<string, unknown>,
+): Promise<string> {
+  const client = new Client({ name: 'review-worker', version: '0.1.0' });
+  const transport = new StreamableHTTPClientTransport(new URL(mcpGitlabUrl));
+  await client.connect(transport);
+  try {
+    const result = (await client.callTool({ name: toolName, arguments: args })) as McpToolResult;
+    if (result.isError) {
+      const text = result.content.find((c) => c.type === 'text')?.text ?? '';
+      throw ApplicationFailure.nonRetryable(`${toolName} failed: ${text}`, 'McpToolError');
+    }
+    return result.content.find((c) => c.type === 'text')?.text ?? '';
+  } finally {
+    await client.close();
+  }
+}
+
 async function readMrDiff(
   mcpGitlabUrl: string,
   projectId: number,
   mrIid: number,
 ): Promise<MrFileChange[]> {
-  const client = new Client({ name: 'review-worker', version: '0.1.0' });
-  const transport = new StreamableHTTPClientTransport(new URL(mcpGitlabUrl));
-  await client.connect(transport);
-  try {
-    const result = (await client.callTool({
-      name: 'gitlab_get_mr_diff',
-      arguments: { project_id: String(projectId), mr_iid: mrIid },
-    })) as McpToolResult;
-    if (result.isError) {
-      const text = result.content.find((c) => c.type === 'text')?.text ?? '';
-      throw ApplicationFailure.nonRetryable(`gitlab_get_mr_diff failed: ${text}`, 'McpToolError');
-    }
-    const text = result.content.find((c) => c.type === 'text')?.text ?? '[]';
-    return JSON.parse(text) as MrFileChange[];
-  } finally {
-    await client.close();
-  }
+  const text = await callMcpTool(mcpGitlabUrl, 'gitlab_get_mr_diff', {
+    project_id: String(projectId),
+    mr_iid: mrIid,
+  });
+  return JSON.parse(text || '[]') as MrFileChange[];
 }
 
 async function readMrMetadata(
@@ -60,24 +68,12 @@ async function readMrMetadata(
   projectId: number,
   mrIid: number,
 ): Promise<{ title: string; description: string }> {
-  const client = new Client({ name: 'review-worker', version: '0.1.0' });
-  const transport = new StreamableHTTPClientTransport(new URL(mcpGitlabUrl));
-  await client.connect(transport);
-  try {
-    const result = (await client.callTool({
-      name: 'gitlab_get_mr',
-      arguments: { project_id: String(projectId), mr_iid: mrIid },
-    })) as McpToolResult;
-    if (result.isError) {
-      const text = result.content.find((c) => c.type === 'text')?.text ?? '';
-      throw ApplicationFailure.nonRetryable(`gitlab_get_mr failed: ${text}`, 'McpToolError');
-    }
-    const text = result.content.find((c) => c.type === 'text')?.text ?? '{}';
-    const mr = JSON.parse(text) as { title: string; description: string };
-    return { title: mr.title, description: mr.description ?? '' };
-  } finally {
-    await client.close();
-  }
+  const text = await callMcpTool(mcpGitlabUrl, 'gitlab_get_mr', {
+    project_id: String(projectId),
+    mr_iid: mrIid,
+  });
+  const mr = JSON.parse(text || '{}') as { title: string; description: string };
+  return { title: mr.title, description: mr.description ?? '' };
 }
 
 export async function reviewCode(input: ReviewCodeInput): Promise<void> {
