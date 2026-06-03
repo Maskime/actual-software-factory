@@ -5,10 +5,11 @@ import {
 import { defineSearchAttributeKey } from '@temporalio/common';
 import type * as gitlab from './activities/gitlab.js';
 import type * as agents from './activities/agents.js';
+import type * as reviewActivities from './activities/reviewAgent.js';
 import type { PipelineInput } from './types.js';
 import { WORKFLOW_LABELS, PIPELINE_STAGE } from './types.js';
 import {
-  gitlabActivityOptions, agentActivityOptions,
+  gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions,
   humanInTheLoopConfig, suspendNotificationConfig,
 } from './config.js';
 
@@ -16,9 +17,11 @@ const { applyWorkflowLabel, closeIssue, addIssueComment } = proxyActivities<type
   gitlabActivityOptions()
 );
 
-const { runDevAgent, runReviewAgent, runFixReviewAgent,
+const { runDevAgent, runFixReviewAgent,
         runStaticAnalysisAgent, runFixStaticAgent, runMergeAgent } =
   proxyActivities<typeof agents>(agentActivityOptions());
+
+const { reviewCode } = proxyActivities<typeof reviewActivities>(reviewAgentActivityOptions());
 
 const approveMergeSignal = defineSignal('approve-merge');
 const resumeSignal        = defineSignal('resume');
@@ -140,7 +143,7 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   await applyLabel(L.review, L.dev);
   log.info('Starting review agent', { issueIid: iid });
   await withSuspendOnFailure(ctx, 'review', PIPELINE_STAGE.review, () =>
-    runReviewAgent({ ...input, mrIid: devOutput.mrIid, branchName: devOutput.branchName })
+    reviewCode({ ...input, mrIid: devOutput.mrIid, branchName: devOutput.branchName })
   );
 
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.fix }]);

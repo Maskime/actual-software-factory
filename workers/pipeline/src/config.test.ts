@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { gitlabActivityOptions, agentActivityOptions, humanInTheLoopConfig, suspendNotificationConfig } from './config.js'
+import { gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions, humanInTheLoopConfig, suspendNotificationConfig } from './config.js'
 
 const GITLAB_KEYS = [
   'GITLAB_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT',
@@ -17,11 +17,13 @@ const AGENT_KEYS = [
   'AGENT_ACTIVITY_BACKOFF_COEFFICIENT',
 ] as const
 
+const REVIEW_KEYS = ['REVIEW_AGENT_TASK_QUEUE'] as const
+
 const HITL_KEYS    = ['HUMAN_IN_THE_LOOP', 'HUMAN_IN_THE_LOOP_TIMEOUT'] as const
 const SUSPEND_KEYS = ['SUSPEND_NOTIFICATION'] as const
 
 function clearEnv() {
-  for (const k of [...GITLAB_KEYS, ...AGENT_KEYS, ...HITL_KEYS, ...SUSPEND_KEYS]) delete process.env[k]
+  for (const k of [...GITLAB_KEYS, ...AGENT_KEYS, ...REVIEW_KEYS, ...HITL_KEYS, ...SUSPEND_KEYS]) delete process.env[k]
 }
 
 describe('gitlabActivityOptions', () => {
@@ -96,6 +98,32 @@ describe('agentActivityOptions', () => {
   it('overrides maximumAttempts via env var', () => {
     process.env.AGENT_ACTIVITY_MAX_ATTEMPTS = '5'
     expect(agentActivityOptions().retry?.maximumAttempts).toBe(5)
+  })
+})
+
+describe('reviewAgentActivityOptions', () => {
+  beforeEach(clearEnv)
+  afterEach(clearEnv)
+
+  it('dispatches to review-agent task queue by default', () => {
+    expect(reviewAgentActivityOptions().taskQueue).toBe('review-agent')
+  })
+
+  it('overrides taskQueue via REVIEW_AGENT_TASK_QUEUE env var', () => {
+    process.env.REVIEW_AGENT_TASK_QUEUE = 'custom-review-queue'
+    expect(reviewAgentActivityOptions().taskQueue).toBe('custom-review-queue')
+  })
+
+  it('returns default scheduleToCloseTimeout of 4 hours', () => {
+    expect(reviewAgentActivityOptions().scheduleToCloseTimeout).toBe('4 hours')
+  })
+
+  it('returns default maximumAttempts of 3', () => {
+    expect(reviewAgentActivityOptions().retry?.maximumAttempts).toBe(3)
+  })
+
+  it('includes MaxIterationsError in nonRetryableErrorTypes', () => {
+    expect(reviewAgentActivityOptions().retry?.nonRetryableErrorTypes).toContain('MaxIterationsError')
   })
 })
 
