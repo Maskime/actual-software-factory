@@ -21,6 +21,7 @@ const WORKFLOW_ENV_DEFAULTS: Record<string, string> = {
   GITLAB_ACTIVITY_INITIAL_INTERVAL:          '5s',
   GITLAB_ACTIVITY_BACKOFF_COEFFICIENT:       '2',
   AGENT_TASK_QUEUE:                           'factory-agents',
+  REVIEW_AGENT_TASK_QUEUE:                    'review-agent',
   AGENT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT:  '4 hours',
   AGENT_ACTIVITY_START_TO_CLOSE_TIMEOUT:     '60 minutes',
   AGENT_ACTIVITY_HEARTBEAT_TIMEOUT:          '2 minutes',

@@ -33,6 +33,21 @@ export function agentActivityOptions(): ActivityOptions {
   };
 }
 
+export function reviewAgentActivityOptions(): ActivityOptions {
+  return {
+    taskQueue:              process.env.REVIEW_AGENT_TASK_QUEUE                    ?? 'review-agent',
+    scheduleToCloseTimeout: process.env.AGENT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT  ?? '4 hours',
+    startToCloseTimeout:    process.env.AGENT_ACTIVITY_START_TO_CLOSE_TIMEOUT     ?? '60 minutes',
+    heartbeatTimeout:       process.env.AGENT_ACTIVITY_HEARTBEAT_TIMEOUT          ?? '2 minutes',
+    retry: {
+      maximumAttempts:        Number(process.env.AGENT_ACTIVITY_MAX_ATTEMPTS         ?? '3'),
+      initialInterval:        process.env.AGENT_ACTIVITY_INITIAL_INTERVAL            ?? '30s',
+      backoffCoefficient:     Number(process.env.AGENT_ACTIVITY_BACKOFF_COEFFICIENT  ?? '2'),
+      nonRetryableErrorTypes: ['MaxIterationsError'],
+    },
+  };
+}
+
 export function humanInTheLoopConfig(): { enabled: boolean; timeout: Duration } {
   return {
     enabled: process.env.HUMAN_IN_THE_LOOP === 'true',

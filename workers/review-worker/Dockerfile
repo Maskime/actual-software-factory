@@ -1,23 +1,23 @@
 FROM node:22-bookworm-slim AS builder
 WORKDIR /app
 # Minimal workspace root so npm resolves @factory/worker-shared from the local shared/ package
-RUN echo '{"private":true,"workspaces":["shared","pipeline"]}' > package.json
+RUN echo '{"private":true,"workspaces":["shared","review-worker"]}' > package.json
 COPY shared/package.json ./shared/
-COPY pipeline/package.json pipeline/tsconfig.json ./pipeline/
+COPY review-worker/package.json review-worker/tsconfig.json ./review-worker/
 RUN npm install --workspaces
 COPY shared/src ./shared/src
-COPY pipeline/src ./pipeline/src
-WORKDIR /app/pipeline
+COPY review-worker/src ./review-worker/src
+WORKDIR /app/review-worker
 RUN npm run build
 
 FROM node:22-bookworm-slim
 WORKDIR /app
-RUN echo '{"private":true,"workspaces":["shared","pipeline"]}' > package.json
+RUN echo '{"private":true,"workspaces":["shared","review-worker"]}' > package.json
 COPY shared/package.json ./shared/
 COPY shared/src ./shared/src
-COPY pipeline/package.json ./pipeline/
+COPY review-worker/package.json ./review-worker/
 RUN npm install --omit=dev --workspaces
-WORKDIR /app/pipeline
-COPY --from=builder /app/pipeline/dist ./dist
+WORKDIR /app/review-worker
+COPY --from=builder /app/review-worker/dist ./dist
 USER node
 CMD ["node", "dist/worker.js"]

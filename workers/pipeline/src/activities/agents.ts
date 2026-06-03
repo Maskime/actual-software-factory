@@ -1,12 +1,8 @@
-import type { DevAgentOutput, PipelineInput, ReviewAgentInput } from '../types.js';
+import type { DevAgentOutput, PipelineInput } from '../types.js';
 
 export async function runDevAgent(_input: PipelineInput): Promise<DevAgentOutput> {
   // Implemented in EPIC-05
   throw new Error('Not implemented');
-}
-
-export async function runReviewAgent(_input: ReviewAgentInput): Promise<void> {
-  // Implemented in EPIC-06
 }
 
 export async function runFixReviewAgent(_input: PipelineInput): Promise<void> {
