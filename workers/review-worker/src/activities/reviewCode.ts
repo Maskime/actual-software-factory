@@ -179,6 +179,7 @@ async function analyzeWithClaude(
   mrContext: MrContext,
 ): Promise<ReviewComment[]> {
   const formattedDiff = formatDiff(mrContext.diff);
+  const descriptionSection = mrContext.description ? `\n\nDescription: ${mrContext.description}` : '';
 
   const response = await client.messages.create({
     model,
@@ -195,7 +196,7 @@ async function analyzeWithClaude(
     messages: [
       {
         role: 'user',
-        content: `## MR: ${mrContext.title}${mrContext.description ? `\n\nDescription: ${mrContext.description}` : ''}
+        content: `## MR: ${mrContext.title}${descriptionSection}
 
 ## Diff
 
