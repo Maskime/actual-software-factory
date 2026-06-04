@@ -36,6 +36,7 @@ test:
     - npm run test:coverage -w @factory/worker-pipeline
     - npm run test:coverage -w @factory/worker-agents
     - npm run test:coverage -w @factory/worker-review
+    - npm run test:coverage -w @factory/worker-review-fix
     - npx nuxi prepare --cwd apps
     - npm run test:coverage -w @factory/portal
   artifacts:
@@ -46,6 +47,7 @@ test:
       - workers/pipeline/coverage/
       - workers/agents/coverage/
       - workers/review-worker/coverage/
+      - workers/review-fix-worker/coverage/
       - apps/coverage/
     expire_in: 1 day
   rules:
