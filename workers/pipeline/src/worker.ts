@@ -3,6 +3,8 @@ import { createHealthServer } from '@factory/worker-shared';
 import { fileURLToPath } from 'node:url';
 import webpack from 'webpack';
 import * as gitlabActivities from './activities/gitlab.js';
+import { createWebhookServer } from './webhook.js';
+import { webhookConfig } from './config.js';
 
 const TASK_QUEUE   = process.env.TEMPORAL_TASK_QUEUE ?? 'factory-pipeline';
 const NAMESPACE    = process.env.TEMPORAL_NAMESPACE  ?? 'factory';
@@ -31,6 +33,7 @@ const WORKFLOW_ENV_DEFAULTS: Record<string, string> = {
   HUMAN_IN_THE_LOOP:                         'false',
   HUMAN_IN_THE_LOOP_TIMEOUT:                 '24 hours',
   SUSPEND_NOTIFICATION:                      'true',
+  SONARQUBE_CI_TIMEOUT:                      '30 minutes',
 };
 
 const workflowDefines = Object.fromEntries(
@@ -41,6 +44,10 @@ const workflowDefines = Object.fromEntries(
 );
 
 const connection = await NativeConnection.connect({ address: ADDRESS });
+const webhookCfg = webhookConfig();
+const { close: closeWebhook } = await createWebhookServer(
+  webhookCfg.port, webhookCfg.secret, NAMESPACE, ADDRESS,
+);
 
 const worker = await Worker.create({
   connection,
@@ -56,11 +63,14 @@ const worker = await Worker.create({
   },
 });
 
-process.on('SIGTERM', () => { healthServer.close(); worker.shutdown(); });
-process.on('SIGINT',  () => { healthServer.close(); worker.shutdown(); });
+process.on('SIGTERM', () => { healthServer.close(); closeWebhook(); worker.shutdown(); });
+process.on('SIGINT',  () => { healthServer.close(); closeWebhook(); worker.shutdown(); });
 
 process.stderr.write(
   `[pipeline-worker] Started (namespace="${NAMESPACE}", taskQueue="${TASK_QUEUE}", address="${ADDRESS}")\n`
+);
+process.stderr.write(
+  `[pipeline-worker] Webhook server on :${webhookCfg.port}\n`
 );
 
 await worker.run();

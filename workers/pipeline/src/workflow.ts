@@ -6,11 +6,11 @@ import { defineSearchAttributeKey } from '@temporalio/common';
 import type * as gitlab from './activities/gitlab.js';
 import type * as agents from './activities/agents.js';
 import type * as reviewActivities from './activities/reviewAgent.js';
-import type { PipelineInput } from './types.js';
+import type { PipelineInput, SonarqubeScanResult } from './types.js';
 import { WORKFLOW_LABELS, PIPELINE_STAGE } from './types.js';
 import {
   gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions,
-  humanInTheLoopConfig, suspendNotificationConfig,
+  humanInTheLoopConfig, suspendNotificationConfig, sonarqubeCiTimeoutConfig,
 } from './config.js';
 
 const { applyWorkflowLabel, closeIssue, addIssueComment } = proxyActivities<typeof gitlab>(
@@ -23,8 +23,9 @@ const { runDevAgent, runFixReviewAgent,
 
 const { reviewCode } = proxyActivities<typeof reviewActivities>(reviewAgentActivityOptions());
 
-const approveMergeSignal = defineSignal('approve-merge');
-const resumeSignal        = defineSignal('resume');
+const approveMergeSignal             = defineSignal('approve-merge');
+const resumeSignal                    = defineSignal('resume');
+const sonarqubeScanCompletedSignal    = defineSignal<[SonarqubeScanResult]>('sonarqube-scan-completed');
 
 const issueIidKey = defineSearchAttributeKey('GitLabIssueIid', 'INT');
 const stageKey    = defineSearchAttributeKey('PipelineStage', 'KEYWORD');
@@ -118,9 +119,13 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   const L      = WORKFLOW_LABELS;
   const notify = suspendNotificationConfig();
 
-  const resumeCountRef  = { value: 0 };
-  const currentLabelRef = { value: '' };
+  const resumeCountRef    = { value: 0 };
+  const currentLabelRef   = { value: '' };
+  const scanResultVersion = { value: 0 };
+  let sonarqubeScanResult: SonarqubeScanResult | undefined;
+
   setHandler(resumeSignal, () => { resumeCountRef.value++; });
+  setHandler(sonarqubeScanCompletedSignal, (r) => { sonarqubeScanResult = r; scanResultVersion.value++; });
 
   const ctx: SuspendCtx = { pid, iid, L, notifyEnabled: notify.enabled, resumeCountRef, currentLabelRef };
 
@@ -164,6 +169,48 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   }
   log.info('Starting static analysis agent', { issueIid: iid });
   await withSuspendOnFailure(ctx, 'sonarqube', PIPELINE_STAGE.sonarqube, () => runStaticAnalysisAgent(input));
+
+  // Await GitLab CI pipeline completion via webhook signal
+  upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.awaiting_ci }]);
+  await applyLabel(L.awaiting_ci, L.sonarqube);
+  log.info('Awaiting sonarqube-scan-completed signal', { issueIid: iid });
+
+  const ciTimeout = sonarqubeCiTimeoutConfig().timeout;
+
+  // eslint-disable-next-line no-constant-condition
+  while (true) {
+    const expectedVersion = scanResultVersion.value + 1;
+    const signaled = await condition(() => scanResultVersion.value >= expectedVersion, ciTimeout);
+
+    if (!signaled) {
+      log.warn('CI timeout — waiting indefinitely for signal', { issueIid: iid });
+      await addIssueComment(pid, iid,
+        `⚠️ Timeout en attente du signal \`sonarqube-scan-completed\`. ` +
+        `Relancer le pipeline CI ou envoyer le signal manuellement.`);
+      await condition(() => scanResultVersion.value >= expectedVersion);
+    }
+
+    if (sonarqubeScanResult!.status === 'passed') {
+      log.info('CI SonarQube passed', { issueIid: iid, prKey: sonarqubeScanResult!.sonarqubePrKey });
+      break;
+    }
+
+    log.warn('CI SonarQube failed — suspending', { issueIid: iid });
+    const suspendedFrom  = currentLabelRef.value;
+    const expectedResume = resumeCountRef.value + 1;
+    upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.suspended }]);
+    await notifySuspension(pid, iid, 'sonarqube-ci',
+      'Le pipeline CI SonarQube a échoué. Corriger et relancer le pipeline CI pour reprendre.',
+      suspendedFrom, notify.enabled, L);
+    ctx.currentLabelRef.value = L.suspended;
+    await condition(() => ctx.resumeCountRef.value >= expectedResume);
+    await restoreAfterResume(pid, iid, PIPELINE_STAGE.awaiting_ci, suspendedFrom, L);
+    ctx.currentLabelRef.value = suspendedFrom;
+  }
+
+  upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.sonarqube }]);
+  await applyLabel(L.sonarqube, L.awaiting_ci);
+
   await withSuspendOnFailure(ctx, 'sonarqube', PIPELINE_STAGE.sonarqube, () => runFixStaticAgent(input));
 
   const hitl = humanInTheLoopConfig();

@@ -267,6 +267,10 @@ services:
       HUMAN_IN_THE_LOOP: "${HUMAN_IN_THE_LOOP:-false}"
       HUMAN_IN_THE_LOOP_TIMEOUT: "${HUMAN_IN_THE_LOOP_TIMEOUT:-24 hours}"
       HEALTH_PORT: "9091"
+      WEBHOOK_PORT: "9093"
+      GITLAB_WEBHOOK_SECRET: "${GITLAB_WEBHOOK_SECRET}"
+    expose:
+      - "9093"
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:9091/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s

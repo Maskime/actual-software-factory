@@ -95,7 +95,7 @@ describe('closeIssue', () => {
         method: 'PUT',
         body: JSON.stringify({
           state_event: 'close',
-          remove_labels: 'workflow::dev,workflow::review,workflow::fix,workflow::sonarqube,workflow::awaiting-approval,workflow::merge,workflow::suspended',
+          remove_labels: 'workflow::dev,workflow::review,workflow::fix,workflow::sonarqube,workflow::awaiting-ci,workflow::awaiting-approval,workflow::merge,workflow::suspended',
         }),
       })
     )
