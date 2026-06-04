@@ -106,3 +106,7 @@
 - [US-07] M3 : `GITLAB_TEST_PROJECT_PATH` doit pointer sur un projet isolé dédié aux tests — si le projet `root/factory-test` est partagé avec d'autres usages, les branches/issues test peuvent entrer en conflit
 - [US-07] M4 : Timeout Temporal de 30s non configurable — sur une machine chargée ou si le worker met du temps à démarrer, le workflow peut ne pas se compléter à temps ; exposer `TEMPORAL_TEST_TIMEOUT_MS` (déjà en place dans le code, documenter dans .env.example)
 - [US-07] M5 : Endpoint de `mcp-sonarqube` non documenté — l'image officielle `mcp/sonarqube` peut exposer `/mcp`, `/sse` ou `/message` selon la version ; si la connexion échoue, le test est SKIP avec un message clair mais la cause exacte n'est pas diagnostiquée
+
+## EPIC-07 — review-fix-worker (US-2 — Lecture des commentaires bloquants)
+
+- [EPIC-07/US-2] M1 : `handleGetMr` récupère les notes avec `per_page=100` sans pagination — un MR avec plus de 100 notes verrait des commentaires `[BLOQUANT]` silencieusement omis ; implémenter la pagination dans `handleGetMr` ou exposer un champ `has_more_comments` (voir aussi [EPIC-02/US-03] M2)

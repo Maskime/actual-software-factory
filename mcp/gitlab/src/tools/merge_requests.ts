@@ -21,12 +21,20 @@ interface GitLabMR {
   merge_commit_sha: string | null;
 }
 
+interface GitLabNotePosition {
+  new_path?: string;
+  old_path?: string;
+  new_line?: number | null;
+  old_line?: number | null;
+}
+
 interface GitLabNote {
   id: number;
   body: string;
   system: boolean;
   created_at: string;
   author: { id: number; username: string; name: string };
+  position?: GitLabNotePosition | null;
 }
 
 interface GitLabChanges {
@@ -113,6 +121,7 @@ export async function handleGetMr(
         body: n.body,
         author: n.author,
         created_at: n.created_at,
+        position: n.position ?? null,
       }));
 
     return {
