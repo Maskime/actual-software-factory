@@ -8,9 +8,9 @@ interface GitlabPipelinePayload {
   project: { id: number };
 }
 
-function extractIssueIid(branchName: string): number | null {
-  const match = branchName.match(/^feature\/(\d+)(?:-|$)/);
-  return match ? parseInt(match[1], 10) : null;
+export function extractIssueIid(branchName: string): number | null {
+  const match = /^feature\/(\d+)(?:-|$)/.exec(branchName);
+  return match ? Number.parseInt(match[1], 10) : null;
 }
 
 function readBody(req: import('node:http').IncomingMessage): Promise<string> {
@@ -93,7 +93,7 @@ export async function createWebhookServer(
     }
   });
 
-  server.listen(port);
+  await new Promise<void>((resolve) => server.listen(port, resolve));
 
   return {
     server,
