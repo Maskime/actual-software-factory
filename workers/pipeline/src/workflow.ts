@@ -6,10 +6,12 @@ import { defineSearchAttributeKey } from '@temporalio/common';
 import type * as gitlab from './activities/gitlab.js';
 import type * as agents from './activities/agents.js';
 import type * as reviewActivities from './activities/reviewAgent.js';
+import type * as staticAnalysisActivities from './activities/staticAnalysisAgent.js';
 import type { PipelineInput, SonarqubeScanResult } from './types.js';
 import { WORKFLOW_LABELS, PIPELINE_STAGE } from './types.js';
 import {
   gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions,
+  staticAnalysisActivityOptions,
   humanInTheLoopConfig, suspendNotificationConfig, sonarqubeCiTimeoutConfig,
 } from './config.js';
 
@@ -18,10 +20,12 @@ const { applyWorkflowLabel, closeIssue, addIssueComment } = proxyActivities<type
 );
 
 const { runDevAgent, runFixReviewAgent,
-        runStaticAnalysisAgent, runFixStaticAgent, runMergeAgent } =
+        runFixStaticAgent, runMergeAgent } =
   proxyActivities<typeof agents>(agentActivityOptions());
 
 const { reviewCode } = proxyActivities<typeof reviewActivities>(reviewAgentActivityOptions());
+
+const { runStaticAnalysisAgent } = proxyActivities<typeof staticAnalysisActivities>(staticAnalysisActivityOptions());
 
 const approveMergeSignal             = defineSignal('approve-merge');
 const resumeSignal                    = defineSignal('resume');

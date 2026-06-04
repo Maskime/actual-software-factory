@@ -33,6 +33,21 @@ export function agentActivityOptions(): ActivityOptions {
   };
 }
 
+export function staticAnalysisActivityOptions(): ActivityOptions {
+  return {
+    taskQueue:              process.env.STATIC_ANALYSIS_TASK_QUEUE                  ?? 'static-analysis-agent',
+    scheduleToCloseTimeout: process.env.AGENT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT   ?? '4 hours',
+    startToCloseTimeout:    process.env.AGENT_ACTIVITY_START_TO_CLOSE_TIMEOUT      ?? '60 minutes',
+    heartbeatTimeout:       process.env.AGENT_ACTIVITY_HEARTBEAT_TIMEOUT           ?? '2 minutes',
+    retry: {
+      maximumAttempts:        Number(process.env.AGENT_ACTIVITY_MAX_ATTEMPTS         ?? '3'),
+      initialInterval:        process.env.AGENT_ACTIVITY_INITIAL_INTERVAL            ?? '30s',
+      backoffCoefficient:     Number(process.env.AGENT_ACTIVITY_BACKOFF_COEFFICIENT  ?? '2'),
+      nonRetryableErrorTypes: ['MaxIterationsError', 'MissingConfigError'],
+    },
+  };
+}
+
 export function reviewAgentActivityOptions(): ActivityOptions {
   return {
     taskQueue:              process.env.REVIEW_AGENT_TASK_QUEUE                    ?? 'review-agent',

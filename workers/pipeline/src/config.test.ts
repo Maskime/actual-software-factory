@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions, humanInTheLoopConfig, suspendNotificationConfig } from './config.js'
+import { gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions, staticAnalysisActivityOptions, humanInTheLoopConfig, suspendNotificationConfig } from './config.js'
 
 const GITLAB_KEYS = [
   'GITLAB_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT',
@@ -17,13 +17,14 @@ const AGENT_KEYS = [
   'AGENT_ACTIVITY_BACKOFF_COEFFICIENT',
 ] as const
 
-const REVIEW_KEYS = ['REVIEW_AGENT_TASK_QUEUE'] as const
+const REVIEW_KEYS         = ['REVIEW_AGENT_TASK_QUEUE'] as const
+const STATIC_ANALYSIS_KEYS = ['STATIC_ANALYSIS_TASK_QUEUE'] as const
 
 const HITL_KEYS    = ['HUMAN_IN_THE_LOOP', 'HUMAN_IN_THE_LOOP_TIMEOUT'] as const
 const SUSPEND_KEYS = ['SUSPEND_NOTIFICATION'] as const
 
 function clearEnv() {
-  for (const k of [...GITLAB_KEYS, ...AGENT_KEYS, ...REVIEW_KEYS, ...HITL_KEYS, ...SUSPEND_KEYS]) delete process.env[k]
+  for (const k of [...GITLAB_KEYS, ...AGENT_KEYS, ...REVIEW_KEYS, ...STATIC_ANALYSIS_KEYS, ...HITL_KEYS, ...SUSPEND_KEYS]) delete process.env[k]
 }
 
 describe('gitlabActivityOptions', () => {
@@ -132,6 +133,36 @@ describe('reviewAgentActivityOptions', () => {
 
   it('includes EmptyDiffError in nonRetryableErrorTypes', () => {
     expect(reviewAgentActivityOptions().retry?.nonRetryableErrorTypes).toContain('EmptyDiffError')
+  })
+})
+
+describe('staticAnalysisActivityOptions', () => {
+  beforeEach(clearEnv)
+  afterEach(clearEnv)
+
+  it('dispatches to static-analysis-agent task queue by default', () => {
+    expect(staticAnalysisActivityOptions().taskQueue).toBe('static-analysis-agent')
+  })
+
+  it('overrides taskQueue via STATIC_ANALYSIS_TASK_QUEUE env var', () => {
+    process.env.STATIC_ANALYSIS_TASK_QUEUE = 'custom-static-queue'
+    expect(staticAnalysisActivityOptions().taskQueue).toBe('custom-static-queue')
+  })
+
+  it('returns default scheduleToCloseTimeout of 4 hours', () => {
+    expect(staticAnalysisActivityOptions().scheduleToCloseTimeout).toBe('4 hours')
+  })
+
+  it('returns default maximumAttempts of 3', () => {
+    expect(staticAnalysisActivityOptions().retry?.maximumAttempts).toBe(3)
+  })
+
+  it('includes MaxIterationsError in nonRetryableErrorTypes', () => {
+    expect(staticAnalysisActivityOptions().retry?.nonRetryableErrorTypes).toContain('MaxIterationsError')
+  })
+
+  it('includes MissingConfigError in nonRetryableErrorTypes', () => {
+    expect(staticAnalysisActivityOptions().retry?.nonRetryableErrorTypes).toContain('MissingConfigError')
   })
 })
 
