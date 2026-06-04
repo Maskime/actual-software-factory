@@ -3,11 +3,17 @@ export interface PipelineInput {
   projectId: number;
 }
 
+export interface SonarqubeScanResult {
+  status: 'passed' | 'failed';
+  sonarqubePrKey: string;
+}
+
 export const WORKFLOW_LABELS = {
   dev:               'workflow::dev',
   review:            'workflow::review',
   fix:               'workflow::fix',
   sonarqube:         'workflow::sonarqube',
+  awaiting_ci:       'workflow::awaiting-ci',
   awaiting_approval: 'workflow::awaiting-approval',
   merge:             'workflow::merge',
   suspended:         'workflow::suspended',
@@ -20,6 +26,7 @@ export const PIPELINE_STAGE = {
   review:            'review',
   fix:               'fix',
   sonarqube:         'sonarqube',
+  awaiting_ci:       'awaiting-ci',
   awaiting_approval: 'awaiting-approval',
   merge:             'merge',
   done:              'done',

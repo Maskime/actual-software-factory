@@ -58,3 +58,16 @@ export function humanInTheLoopConfig(): { enabled: boolean; timeout: Duration } 
 export function suspendNotificationConfig(): { enabled: boolean } {
   return { enabled: process.env.SUSPEND_NOTIFICATION !== 'false' };
 }
+
+export function webhookConfig(): { port: number; secret: string } {
+  return {
+    port: Number.parseInt(process.env.WEBHOOK_PORT ?? '9093', 10),
+    secret: process.env.GITLAB_WEBHOOK_SECRET ?? '',
+  };
+}
+
+export function sonarqubeCiTimeoutConfig(): { timeout: Duration } {
+  return {
+    timeout: (process.env.SONARQUBE_CI_TIMEOUT ?? '30 minutes') as Duration,
+  };
+}

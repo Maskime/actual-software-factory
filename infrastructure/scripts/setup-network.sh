@@ -467,7 +467,59 @@ if [[ "$ERRORS_FOUND" -eq 1 ]]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 9. Summary
+# 9. Configure GitLab Pipeline Hook → pipeline-worker webhook (US-1 EPIC-08)
+# ---------------------------------------------------------------------------
+echo ""
+echo "==> Configuring GitLab Pipeline Hook on Software Factory project..."
+
+# Allow GitLab to send webhooks to local Docker network addresses
+docker exec gitlab gitlab-rails runner "
+  app = ApplicationSetting.current
+  app.allow_local_requests_from_web_hooks_and_services = true
+  app.save!
+" 2>/dev/null && echo "    GitLab local webhook requests enabled." \
+  || echo "    Warning: could not enable local webhook requests (non-fatal)." >&2
+
+FACTORY_PROJECT_ID=3
+WEBHOOK_ENDPOINT="http://pipeline-worker:9093/webhook/gitlab-ci"
+WEBHOOK_TOKEN="${GITLAB_WEBHOOK_SECRET:-}"
+
+EXISTING_HOOK_ID=$(curl -sf --header "PRIVATE-TOKEN: $TOKEN" \
+  "$GITLAB_URL/api/v4/projects/$FACTORY_PROJECT_ID/hooks" 2>/dev/null \
+  | python3 -c "
+import json, sys
+try:
+  hooks = json.load(sys.stdin)
+  match = next((str(h['id']) for h in hooks if h.get('url') == '$WEBHOOK_ENDPOINT'), '')
+  print(match)
+except Exception:
+  print('')
+" 2>/dev/null || echo "")
+
+if [[ -n "$EXISTING_HOOK_ID" ]]; then
+  HTTP=$(curl -s -o /dev/null -w "%{http_code}" --request PUT \
+    --header "PRIVATE-TOKEN: $TOKEN" \
+    "$GITLAB_URL/api/v4/projects/$FACTORY_PROJECT_ID/hooks/$EXISTING_HOOK_ID" \
+    --data-urlencode "url=$WEBHOOK_ENDPOINT" \
+    --data "pipeline_events=true" \
+    --data-urlencode "token=$WEBHOOK_TOKEN")
+  [[ "$HTTP" == "200" ]] \
+    && echo "    Pipeline Hook updated (id=$EXISTING_HOOK_ID) → $WEBHOOK_ENDPOINT" \
+    || echo "    Warning: PUT hook returned HTTP $HTTP" >&2
+else
+  HTTP=$(curl -s -o /dev/null -w "%{http_code}" --request POST \
+    --header "PRIVATE-TOKEN: $TOKEN" \
+    "$GITLAB_URL/api/v4/projects/$FACTORY_PROJECT_ID/hooks" \
+    --data-urlencode "url=$WEBHOOK_ENDPOINT" \
+    --data "pipeline_events=true" \
+    --data-urlencode "token=$WEBHOOK_TOKEN")
+  [[ "$HTTP" == "201" ]] \
+    && echo "    Pipeline Hook created on project $FACTORY_PROJECT_ID → $WEBHOOK_ENDPOINT" \
+    || echo "    Warning: POST hook returned HTTP $HTTP" >&2
+fi
+
+# ---------------------------------------------------------------------------
+# 10. Summary
 # ---------------------------------------------------------------------------
 echo ""
 echo "====================================================="
