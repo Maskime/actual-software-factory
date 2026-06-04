@@ -9,13 +9,9 @@ Génère les user stories pour l'épopée numéro $ARGUMENTS.
 
 **Étapes à suivre :**
 
-1. Recherche l'issue Epic dans GitLab via l'outil `gitlab_list_issues` (project_id=`3`, labels=`epic-$ARGUMENTS`, state=`all`).
-   - Si une issue est trouvée : utilise son `iid` comme `epic_iid` et son champ `description` comme **seule** source du besoin.
-   - Si aucune issue n'est trouvée : crée-la via `gitlab_create_issue` avec :
-     - `project_id` : `3`
-     - `title` : `EPIC-$ARGUMENTS — [Titre de l'épopée]`
-     - `labels` : `epic,epic-$ARGUMENTS`
-     - Puis demande à l'utilisateur de renseigner le contenu de l'épopée avant de continuer.
+1. Liste toutes les issues Epic via `gitlab_list_issues` (project_id=`3`, labels=`epic`, state=`all`). Parmi ces issues, cherche celle qui correspond à l'épopée numéro $ARGUMENTS (ex : titre contenant `EPIC-$ARGUMENTS` ou label `epic-$ARGUMENTS`).
+   - Si une issue correspondante est trouvée : utilise son `iid` comme `epic_iid` et son champ `description` comme **seule** source du besoin.
+   - Si aucune issue correspondante n'est trouvée : **arrête la procédure** et informe l'utilisateur que l'épopée EPIC-$ARGUMENTS n'existe pas dans GitLab. Ne crée jamais l'issue toi-même.
 
 2. Analyse **uniquement** la description de l'issue Epic GitLab récupérée à l'étape précédente pour identifier toutes les user stories nécessaires à sa couverture complète.
 
