@@ -15,6 +15,8 @@ import {
   handleCloseIssue,
   createIssueLinkSchema,
   handleCreateIssueLink,
+  getIssueLinksSchema,
+  handleGetIssueLinks,
   getIssueCommentsSchema,
   handleGetIssueComments,
 } from "./tools/issues.js";
@@ -128,6 +130,13 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     "Create a link between two GitLab issues. Supported link types: relates_to (default), blocks, is_blocked_by. Links are visible in the 'Linked issues' section of each issue. Returns source/target IIDs, link type, and URLs.",
     createIssueLinkSchema.shape,
     (params) => handleCreateIssueLink(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_issue_links",
+    "Get all issue links for a GitLab issue. Returns source_iid, target_iid, link_type (blocks/is_blocked_by/relates_to), title, state, and web_url for each linked issue. Use to build a dependency graph and derive execution order.",
+    getIssueLinksSchema.shape,
+    (params) => handleGetIssueLinks(client, params)
   );
 
   server.tool(
