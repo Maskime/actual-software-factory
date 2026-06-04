@@ -1,5 +1,5 @@
-import { ApplicationFailure, log } from '@temporalio/activity';
-import { callMcpTool } from '@factory/worker-shared';
+import { ApplicationFailure, activityInfo, log } from '@temporalio/activity';
+import { callMcpTool, type AuditContext } from '@factory/worker-shared';
 
 export interface StaticAnalysisInput {
   issueIid: number;
@@ -111,25 +111,32 @@ async function fetchSonarIssues(
   mcpUrl: string,
   projectKey: string,
   branchName: string,
+  auditCtx?: AuditContext,
 ): Promise<SonarIssue[]> {
   const [issuesText, hotspotsText] = await Promise.all([
     callMcpTool('static-analysis-worker', mcpUrl, 'search_sonar_issues_in_projects', {
       projectKey,
       branch: branchName,
-    }),
+    }, auditCtx),
     callMcpTool('static-analysis-worker', mcpUrl, 'search_security_hotspots', {
       projectKey,
       branch: branchName,
-    }),
+    }, auditCtx),
   ]);
   return [...parseIssueList(issuesText), ...parseHotspotList(hotspotsText)];
 }
 
 export async function runStaticAnalysisAgent(input: StaticAnalysisInput): Promise<StaticAnalysisResult> {
+  const info = activityInfo();
+  const auditCtx: AuditContext = {
+    workflowId: info.workflowExecution?.workflowId ?? info.activityId,
+    activityName: 'runStaticAnalysisAgent',
+  };
+
   const { projectKey, mcpSonarqubeUrl } = staticAnalysisConfig();
   log.info('Static analysis agent starting', { mrIid: input.mrIid, branchName: input.branchName });
 
-  const allIssues = await fetchSonarIssues(mcpSonarqubeUrl, projectKey, input.branchName);
+  const allIssues = await fetchSonarIssues(mcpSonarqubeUrl, projectKey, input.branchName, auditCtx);
   const bloquant  = allIssues.filter((i) => classifyIssue(i) === 'bloquant');
   const modéré    = allIssues.filter((i) => classifyIssue(i) === 'modéré');
 

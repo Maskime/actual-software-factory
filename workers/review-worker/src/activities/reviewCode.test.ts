@@ -29,6 +29,11 @@ vi.mock('@temporalio/activity', () => ({
     }),
   },
   log: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+  activityInfo: vi.fn(() => ({
+    workflowExecution: { workflowId: 'test-workflow-id', runId: 'test-run-id' },
+    activityId: 'test-activity-id',
+    activityType: { name: 'reviewCode' },
+  })),
 }));
 
 vi.mock('@anthropic-ai/sdk', () => ({

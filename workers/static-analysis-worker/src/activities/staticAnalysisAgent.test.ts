@@ -6,6 +6,8 @@ const { mockCallMcpTool } = vi.hoisted(() => ({
 
 vi.mock('@factory/worker-shared', () => ({
   callMcpTool: mockCallMcpTool,
+  auditLog: vi.fn(),
+  summarize: vi.fn((v: unknown) => String(v)),
 }));
 
 vi.mock('@temporalio/activity', () => ({
@@ -17,6 +19,11 @@ vi.mock('@temporalio/activity', () => ({
     }),
   },
   log: { info: vi.fn(), warn: vi.fn() },
+  activityInfo: vi.fn(() => ({
+    workflowExecution: { workflowId: 'test-workflow-id', runId: 'test-run-id' },
+    activityId: 'test-activity-id',
+    activityType: { name: 'runStaticAnalysisAgent' },
+  })),
 }));
 
 import {
@@ -166,12 +173,14 @@ describe('runStaticAnalysisAgent', () => {
       expect.any(String),
       'search_sonar_issues_in_projects',
       { projectKey: 'test-project-key', branch: BASE_INPUT.branchName },
+      expect.objectContaining({ workflowId: expect.any(String) }),
     );
     expect(mockCallMcpTool).toHaveBeenCalledWith(
       'static-analysis-worker',
       expect.any(String),
       'search_security_hotspots',
       { projectKey: 'test-project-key', branch: BASE_INPUT.branchName },
+      expect.objectContaining({ workflowId: expect.any(String) }),
     );
   });
 
