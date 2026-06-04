@@ -1,8 +1,6 @@
 import { ApplicationFailure, log } from '@temporalio/activity';
-import { Client } from '@modelcontextprotocol/sdk/client/index.js';
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import Anthropic from '@anthropic-ai/sdk';
-import type { ReviewComment, ReviewAgentOutput } from '@factory/worker-shared';
+import { callMcpTool as sharedCallMcpTool, type ReviewComment, type ReviewAgentOutput } from '@factory/worker-shared';
 
 export interface ReviewCodeInput {
   mrIid: number;
@@ -25,9 +23,6 @@ export interface MrContext {
   description: string;
   diff: MrFileChange[];
 }
-
-type McpContent = { type: string; text?: string };
-type McpToolResult = { content: McpContent[]; isError?: boolean };
 
 const GENERATED_FILE_PATTERNS = [
   'package-lock.json',
@@ -63,24 +58,8 @@ function anthropicClient(): Anthropic {
   return new Anthropic({ apiKey });
 }
 
-async function callMcpTool(
-  mcpGitlabUrl: string,
-  toolName: string,
-  args: Record<string, unknown>,
-): Promise<string> {
-  const client = new Client({ name: 'review-worker', version: '0.1.0' });
-  const transport = new StreamableHTTPClientTransport(new URL(mcpGitlabUrl));
-  await client.connect(transport);
-  try {
-    const result = (await client.callTool({ name: toolName, arguments: args })) as McpToolResult;
-    if (result.isError) {
-      const text = result.content.find((c) => c.type === 'text')?.text ?? '';
-      throw ApplicationFailure.nonRetryable(`${toolName} failed: ${text}`, 'McpToolError');
-    }
-    return result.content.find((c) => c.type === 'text')?.text ?? '';
-  } finally {
-    await client.close();
-  }
+function callMcpTool(mcpGitlabUrl: string, toolName: string, args: Record<string, unknown>): Promise<string> {
+  return sharedCallMcpTool('review-worker', mcpGitlabUrl, toolName, args);
 }
 
 async function postInlineComment(
