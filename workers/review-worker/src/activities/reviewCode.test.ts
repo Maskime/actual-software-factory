@@ -48,7 +48,7 @@ const DIFF_FIXTURE = [
   },
 ];
 
-const META_FIXTURE = { title: 'feat: add foo', description: 'Closes #1', labels: [] };
+const META_FIXTURE = { title: 'feat: add foo', description: 'Closes #1', labels: [], web_url: 'http://localhost/root/software-factory/-/merge_requests/10' };
 
 const INPUT = { mrIid: 10, projectId: 3, issueIid: 1, branchName: 'feature/1-test' };
 
@@ -167,7 +167,8 @@ describe('reviewCode', () => {
     mockCallTool
       .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
       .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
-      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 })); // summary only
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))  // summary only
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 1, id: 1, web_url: 'http://localhost/...' })); // backlog issue
     mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse([fileLevelComment]));
 
     const result = await reviewCode(INPUT);
@@ -188,7 +189,8 @@ describe('reviewCode', () => {
       .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))
       .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))
       .mockResolvedValueOnce(makeMcpResponse({ note_id: 3 }))
-      .mockResolvedValueOnce(makeMcpResponse({ note_id: 4 })); // summary
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 4 }))  // summary
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 1, id: 1, web_url: 'http://localhost/...' })); // backlog issue
     mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
 
     const result = await reviewCode(INPUT);
@@ -285,12 +287,13 @@ describe('reviewCode', () => {
     mockCallTool
       .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
       .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
-      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }));
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 1, id: 1, web_url: 'http://localhost/...' })); // backlog issue
     mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse([fileLevel]));
 
     await reviewCode(INPUT);
 
-    expect(mockCallTool).toHaveBeenCalledTimes(3);
+    expect(mockCallTool).toHaveBeenCalledTimes(4);
     expect(mockCallTool).toHaveBeenNthCalledWith(3,
       expect.objectContaining({
         name: 'gitlab_add_mr_comment',
@@ -341,6 +344,113 @@ describe('reviewCode', () => {
     );
   });
 
+  // --- US-5 tests ---
+
+  it('creates a backlog issue for each modéré comment', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const comments: ReviewComment[] = [
+      { file: 'src/a.ts', line: 10,   description: 'Missing error handling', classification: 'modéré' },
+      { file: 'src/b.ts', line: null, description: 'No tests written',       classification: 'modéré' },
+    ];
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))  // inline a.ts
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))  // summary
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 1, id: 1, web_url: 'http://localhost/...' }))  // issue a.ts
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 2, id: 2, web_url: 'http://localhost/...' })); // issue b.ts
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
+
+    await reviewCode(INPUT);
+
+    type CallArg = { name: string };
+    const issueCalls = mockCallTool.mock.calls
+      .map((c: unknown[]) => c[0] as CallArg)
+      .filter((a) => a.name === 'gitlab_create_issue');
+    expect(issueCalls).toHaveLength(2);
+  });
+
+  it('backlog issue has correct title, description, label and MR link', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const comment: ReviewComment = {
+      file: 'src/a.ts',
+      line: 10,
+      description: 'Missing error handling',
+      classification: 'modéré',
+    };
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))  // inline
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))  // summary
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 1, id: 1, web_url: 'http://localhost/...' })); // issue
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse([comment]));
+
+    await reviewCode(INPUT);
+
+    type IssueCallArg = { name: string; arguments: { title: string; description: string; labels: string; project_id: string } };
+    const issueCall = mockCallTool.mock.calls
+      .map((c: unknown[]) => c[0] as IssueCallArg)
+      .find((a) => a.name === 'gitlab_create_issue')!;
+    expect(issueCall.arguments.title).toContain('[Backlog]');
+    expect(issueCall.arguments.title).toContain('src/a.ts:10');
+    expect(issueCall.arguments.title).toContain('Missing error handling');
+    expect(issueCall.arguments.description).toContain('Missing error handling');
+    expect(issueCall.arguments.description).toContain(META_FIXTURE.web_url);
+    expect(issueCall.arguments.description).toContain('`src/a.ts:10`');
+    expect(issueCall.arguments.labels).toBe('backlog');
+    expect(issueCall.arguments.project_id).toBe('3');
+  });
+
+  it('does not create backlog issues for bloquant or esthétique comments', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const comments: ReviewComment[] = [
+      { file: 'src/a.ts', line: 1, description: 'Security bug',  classification: 'bloquant' },
+      { file: 'src/b.ts', line: 2, description: 'Style issue',   classification: 'esthétique' },
+    ];
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 3 }));
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
+
+    await reviewCode(INPUT);
+
+    type CallArg = { name: string };
+    const issueCalls = mockCallTool.mock.calls
+      .map((c: unknown[]) => c[0] as CallArg)
+      .filter((a) => a.name === 'gitlab_create_issue');
+    expect(issueCalls).toHaveLength(0);
+  });
+
+  it('logs a warning and continues when backlog issue creation fails', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const comment: ReviewComment = {
+      file: 'src/a.ts',
+      line: 5,
+      description: 'Missing error handling',
+      classification: 'modéré',
+    };
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))  // inline
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))  // summary
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Forbidden' }], isError: true }); // issue fails
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse([comment]));
+
+    const result = await reviewCode(INPUT);
+
+    const { log } = await import('@temporalio/activity');
+    expect(log.warn).toHaveBeenCalledWith(
+      'Failed to create backlog issue',
+      expect.objectContaining({ file: 'src/a.ts', line: 5 }),
+    );
+    expect(result.comments).toHaveLength(1);
+  });
+
   it('summary body contains a count table with correct totals and file-level comment', async () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
     const comments: ReviewComment[] = [
@@ -355,12 +465,16 @@ describe('reviewCode', () => {
       .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))
       .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))
       .mockResolvedValueOnce(makeMcpResponse({ note_id: 3 }))
-      .mockResolvedValueOnce(makeMcpResponse({ note_id: 4 }));
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 4 }))  // summary
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 1, id: 1, web_url: 'http://localhost/...' })); // backlog issue
     mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
 
     await reviewCode(INPUT);
 
-    const summaryCall = mockCallTool.mock.calls.at(-1)![0] as { name: string; arguments: { body: string } };
+    type CallArg = { name: string; arguments: { body: string } };
+    const summaryCall = mockCallTool.mock.calls
+      .map((c: unknown[]) => c[0] as CallArg)
+      .find((a) => a.name === 'gitlab_add_mr_comment')!;
     const body = summaryCall.arguments.body;
     expect(body).toContain('[BLOQUANT]');
     expect(body).toContain('[MODÉRÉ]');
