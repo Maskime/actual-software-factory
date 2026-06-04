@@ -9,10 +9,6 @@ export async function runFixReviewAgent(_input: PipelineInput): Promise<void> {
   // Implemented in EPIC-07
 }
 
-export async function runStaticAnalysisAgent(_input: PipelineInput): Promise<void> {
-  // Implemented in EPIC-08
-}
-
 export async function runFixStaticAgent(_input: PipelineInput): Promise<void> {
   // Implemented in EPIC-09
 }

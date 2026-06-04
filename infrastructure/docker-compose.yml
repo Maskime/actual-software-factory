@@ -393,6 +393,42 @@ services:
         condition: service_started
 
   # ---------------------------------------------------------------------------
+  # Static Analysis Worker — Temporal worker pour l'agent d'analyse statique (EPIC-09)
+  # Task queue : static-analysis-agent
+  # Build requis avant up : npm run build -w @factory/worker-static-analysis
+  # ---------------------------------------------------------------------------
+  static-analysis-worker:
+    build:
+      context: ../workers
+      dockerfile: static-analysis-worker/Dockerfile
+    container_name: static-analysis-worker
+    restart: unless-stopped
+    environment:
+      TEMPORAL_ADDRESS: "temporal:7233"
+      TEMPORAL_NAMESPACE: "factory"
+      TEMPORAL_TASK_QUEUE: "static-analysis-agent"
+      GITLAB_API_INTERNAL_URL: "http://gitlab/api/v4"
+      GITLAB_API_TOKEN: "${GITLAB_API_TOKEN}"
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY}"
+      ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
+      MCP_GITLAB_INTERNAL_URL: "http://mcp-gitlab:3000/mcp"
+      MCP_SONARQUBE_INTERNAL_URL: "http://mcp-sonarqube:3000/mcp"
+      HEALTH_PORT: "9094"
+    healthcheck:
+      test: ["CMD-SHELL", "node -e \"fetch('http://localhost:9094/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+    networks:
+      - factory-network
+    depends_on:
+      temporal:
+        condition: service_healthy
+      mcp-sonarqube:
+        condition: service_started
+
+  # ---------------------------------------------------------------------------
   # Portainer CE — Monitoring et gestion des containers (UI web)
   # UI HTTPS : http://localhost:9443  |  Edge agent tunnel : 8000
   # ---------------------------------------------------------------------------
