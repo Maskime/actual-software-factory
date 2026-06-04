@@ -8,6 +8,7 @@ import {
   handleUpdateIssue,
   handleCloseIssue,
   handleCreateIssueLink,
+  handleGetIssueLinks,
   handleGetIssueComments,
 } from './issues.js'
 
@@ -208,6 +209,55 @@ describe('handleCreateIssueLink()', () => {
   it('returns errorResponse on API error', async () => {
     const client = { post: vi.fn().mockRejectedValue(new GitLabApiError('fail', 404, 'GITLAB_NOT_FOUND')) } as unknown as GitLabClient
     const result = await handleCreateIssueLink(client, { project_id: '3', issue_iid: 1, target_project_id: '3', target_issue_iid: 99 })
+    expect(result.isError).toBe(true)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.error.code).toBe('GITLAB_NOT_FOUND')
+  })
+})
+
+describe('handleGetIssueLinks()', () => {
+  const linkedIssue = {
+    iid: 10,
+    title: 'Blocking task',
+    state: 'opened' as const,
+    web_url: 'http://gl/issues/10',
+    link_type: 'blocks' as const,
+    issue_link_id: 42,
+  }
+
+  it('returns empty array when no links exist', async () => {
+    const client = { get: vi.fn().mockResolvedValue([]) } as unknown as GitLabClient
+    const result = await handleGetIssueLinks(client, { project_id: '3', issue_iid: 5 })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed).toHaveLength(0)
+  })
+
+  it('returns link with type blocks', async () => {
+    const client = { get: vi.fn().mockResolvedValue([linkedIssue]) } as unknown as GitLabClient
+    const result = await handleGetIssueLinks(client, { project_id: '3', issue_iid: 5 })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed).toHaveLength(1)
+    expect(parsed[0].source_iid).toBe(5)
+    expect(parsed[0].target_iid).toBe(10)
+    expect(parsed[0].link_type).toBe('blocks')
+    expect(parsed[0].title).toBe('Blocking task')
+    expect(parsed[0].state).toBe('opened')
+    expect(parsed[0].web_url).toBe('http://gl/issues/10')
+  })
+
+  it('returns link with type is_blocked_by', async () => {
+    const blockedByIssue = { ...linkedIssue, iid: 3, link_type: 'is_blocked_by' as const }
+    const client = { get: vi.fn().mockResolvedValue([blockedByIssue]) } as unknown as GitLabClient
+    const result = await handleGetIssueLinks(client, { project_id: '3', issue_iid: 5 })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed[0].link_type).toBe('is_blocked_by')
+    expect(parsed[0].source_iid).toBe(5)
+    expect(parsed[0].target_iid).toBe(3)
+  })
+
+  it('returns errorResponse on API error', async () => {
+    const client = { get: vi.fn().mockRejectedValue(new GitLabApiError('not found', 404, 'GITLAB_NOT_FOUND')) } as unknown as GitLabClient
+    const result = await handleGetIssueLinks(client, { project_id: '3', issue_iid: 99 })
     expect(result.isError).toBe(true)
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.error.code).toBe('GITLAB_NOT_FOUND')

@@ -309,6 +309,50 @@ export async function handleGetIssueComments(
   }
 }
 
+// gitlab_get_issue_links
+
+interface GitLabLinkedIssue {
+  iid: number;
+  title: string;
+  state: "opened" | "closed";
+  web_url: string;
+  link_type: "relates_to" | "blocks" | "is_blocked_by";
+  issue_link_id: number;
+}
+
+export const getIssueLinksSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  issue_iid: z.number().int().positive().describe("Issue IID to get links for"),
+});
+
+export async function handleGetIssueLinks(
+  client: GitLabClient,
+  params: z.infer<typeof getIssueLinksSchema>
+): Promise<ToolResult> {
+  try {
+    const links = await client.get<GitLabLinkedIssue[]>(
+      `${projectPath(params.project_id)}/issues/${params.issue_iid}/links`
+    );
+    return {
+      content: [{
+        type: "text" as const,
+        text: JSON.stringify(
+          links.map((l) => ({
+            source_iid: params.issue_iid,
+            target_iid: l.iid,
+            link_type: l.link_type,
+            title: l.title,
+            state: l.state,
+            web_url: l.web_url,
+          }))
+        ),
+      }],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
 // gitlab_create_issue_link
 
 interface GitLabIssueLink {
