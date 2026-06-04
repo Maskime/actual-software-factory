@@ -147,16 +147,21 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   );
   log.info('Review agent completed', {
     commentsCount: reviewOutput.comments.length,
-    blocking: reviewOutput.comments.filter((c) => c.classification === 'bloquant').length,
+    blocking: reviewOutput.bloquant,
   });
 
-  upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.fix }]);
-  await applyLabel(L.fix, L.review);
-  log.info('Starting fix-review agent', { issueIid: iid });
-  await withSuspendOnFailure(ctx, 'fix', PIPELINE_STAGE.fix, () => runFixReviewAgent(input));
-
-  upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.sonarqube }]);
-  await applyLabel(L.sonarqube, L.fix);
+  if (reviewOutput.bloquant > 0) {
+    upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.fix }]);
+    await applyLabel(L.fix, L.review);
+    log.info('Starting fix-review agent', { issueIid: iid, bloquant: reviewOutput.bloquant });
+    await withSuspendOnFailure(ctx, 'fix', PIPELINE_STAGE.fix, () => runFixReviewAgent(input));
+    upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.sonarqube }]);
+    await applyLabel(L.sonarqube, L.fix);
+  } else {
+    log.info('No blocking comments — skipping fix-review agent', { issueIid: iid });
+    upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.sonarqube }]);
+    await applyLabel(L.sonarqube, L.review);
+  }
   log.info('Starting static analysis agent', { issueIid: iid });
   await withSuspendOnFailure(ctx, 'sonarqube', PIPELINE_STAGE.sonarqube, () => runStaticAnalysisAgent(input));
   await withSuspendOnFailure(ctx, 'sonarqube', PIPELINE_STAGE.sonarqube, () => runFixStaticAgent(input));
