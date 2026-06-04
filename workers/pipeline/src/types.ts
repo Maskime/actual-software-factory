@@ -48,3 +48,19 @@ export interface ReviewAgentInput {
 }
 
 export type { ReviewComment, ReviewAgentOutput } from '@factory/worker-shared';
+
+export interface SonarIssue {
+  key: string;
+  type: string;
+  severity: string;
+  message: string;
+  component: string;
+  line?: number;
+  vulnerabilityProbability?: string;
+}
+
+export interface StaticAnalysisResult {
+  bloquant: SonarIssue[];
+  modéré: SonarIssue[];
+  hasBlockingIssues: boolean;
+}

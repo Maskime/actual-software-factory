@@ -172,7 +172,9 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
     await applyLabel(L.sonarqube, L.review);
   }
   log.info('Starting static analysis agent', { issueIid: iid });
-  await withSuspendOnFailure(ctx, 'sonarqube', PIPELINE_STAGE.sonarqube, () => runStaticAnalysisAgent(input));
+  const staticResult = await withSuspendOnFailure(ctx, 'sonarqube', PIPELINE_STAGE.sonarqube, () =>
+    runStaticAnalysisAgent({ ...input, mrIid: devOutput.mrIid, branchName: devOutput.branchName })
+  );
 
   // Await GitLab CI pipeline completion via webhook signal
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.awaiting_ci }]);
@@ -215,7 +217,11 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.sonarqube }]);
   await applyLabel(L.sonarqube, L.awaiting_ci);
 
-  await withSuspendOnFailure(ctx, 'sonarqube', PIPELINE_STAGE.sonarqube, () => runFixStaticAgent(input));
+  if (staticResult.hasBlockingIssues) {
+    await withSuspendOnFailure(ctx, 'sonarqube', PIPELINE_STAGE.sonarqube, () => runFixStaticAgent(input));
+  } else {
+    log.info('No blocking SonarQube issues — skipping fix-static agent', { issueIid: iid });
+  }
 
   const hitl = humanInTheLoopConfig();
   if (hitl.enabled) {
