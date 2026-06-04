@@ -155,6 +155,40 @@ async function postSummaryComment(
   });
 }
 
+async function createBacklogIssue(
+  mcpGitlabUrl: string,
+  projectId: number,
+  mrWebUrl: string,
+  comment: ReviewComment,
+): Promise<void> {
+  const fileRef = comment.line === null ? comment.file : `${comment.file}:${comment.line}`;
+  const rawTitle = `[Backlog] ${fileRef} — ${comment.description}`;
+  const title = rawTitle.length > 200 ? rawTitle.slice(0, 200) : rawTitle;
+  const description = `${comment.description}\n\n**MR :** ${mrWebUrl}\n**Fichier :** \`${fileRef}\``;
+  try {
+    await callMcpTool(mcpGitlabUrl, 'gitlab_create_issue', {
+      project_id: String(projectId),
+      title,
+      description,
+      labels: 'backlog',
+    });
+  } catch (error) {
+    log.warn('Failed to create backlog issue', { file: comment.file, line: comment.line, error });
+  }
+}
+
+async function createBacklogIssues(
+  mcpGitlabUrl: string,
+  projectId: number,
+  mrWebUrl: string,
+  comments: ReviewComment[],
+): Promise<void> {
+  const moderate = comments.filter((c) => c.classification === 'modéré');
+  for (const comment of moderate) {
+    await createBacklogIssue(mcpGitlabUrl, projectId, mrWebUrl, comment);
+  }
+}
+
 async function publishComments(
   mcpGitlabUrl: string,
   projectId: number,
@@ -185,13 +219,13 @@ async function readMrMetadata(
   mcpGitlabUrl: string,
   projectId: number,
   mrIid: number,
-): Promise<{ title: string; description: string }> {
+): Promise<{ title: string; description: string; webUrl: string }> {
   const text = await callMcpTool(mcpGitlabUrl, 'gitlab_get_mr', {
     project_id: String(projectId),
     mr_iid: mrIid,
   });
-  const mr = JSON.parse(text || '{}') as { title: string; description: string };
-  return { title: mr.title, description: mr.description ?? '' };
+  const mr = JSON.parse(text || '{}') as { title: string; description: string; web_url?: string };
+  return { title: mr.title, description: mr.description ?? '', webUrl: mr.web_url ?? '' };
 }
 
 const MAX_DIFF_LINES = 300;
@@ -336,6 +370,7 @@ export async function reviewCode(input: ReviewCodeInput): Promise<ReviewAgentOut
   const comments = await analyzeWithClaude(client, anthropicModel, mrContext);
 
   await publishComments(mcpGitlabUrl, input.projectId, input.mrIid, comments);
+  await createBacklogIssues(mcpGitlabUrl, input.projectId, metadata.webUrl, comments);
 
   log.info('Review completed', {
     mrIid: input.mrIid,
