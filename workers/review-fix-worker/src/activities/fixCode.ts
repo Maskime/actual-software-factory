@@ -1,6 +1,6 @@
-import { ApplicationFailure, log } from '@temporalio/activity';
+import { log } from '@temporalio/activity';
 import Anthropic from '@anthropic-ai/sdk';
-import { callMcpTool as sharedCallMcpTool } from '@factory/worker-shared';
+import { callMcpTool, createAnthropicClient } from '@factory/worker-shared';
 
 export interface FixCodeInput {
   issueIid: number;
@@ -21,6 +21,7 @@ export interface BlockingFeedback {
 }
 
 const BLOQUANT_PREFIX = '[BLOQUANT]';
+const WORKER_NAME = 'review-fix-worker';
 
 interface MrNotePosition {
   new_path?: string;
@@ -56,24 +57,12 @@ function fixConfig(): { mcpGitlabUrl: string; anthropicModel: string } {
   };
 }
 
-function anthropicClient(): Anthropic {
-  const apiKey = process.env.ANTHROPIC_API_KEY;
-  if (!apiKey) {
-    throw ApplicationFailure.nonRetryable('ANTHROPIC_API_KEY is not set', 'MissingConfigError');
-  }
-  return new Anthropic({ apiKey });
-}
-
-function callMcpTool(mcpGitlabUrl: string, toolName: string, args: Record<string, unknown>): Promise<string> {
-  return sharedCallMcpTool('review-fix-worker', mcpGitlabUrl, toolName, args);
-}
-
 async function fetchBlockingComments(
   mcpGitlabUrl: string,
   projectId: number,
   mrIid: number,
 ): Promise<BlockingFeedback[]> {
-  const text = await callMcpTool(mcpGitlabUrl, 'gitlab_get_mr', {
+  const text = await callMcpTool(WORKER_NAME, mcpGitlabUrl, 'gitlab_get_mr', {
     project_id: String(projectId),
     mr_iid: mrIid,
   });
@@ -95,7 +84,7 @@ async function fetchMrDiff(
   projectId: number,
   mrIid: number,
 ): Promise<MrFileChange[]> {
-  const text = await callMcpTool(mcpGitlabUrl, 'gitlab_get_mr_diff', {
+  const text = await callMcpTool(WORKER_NAME, mcpGitlabUrl, 'gitlab_get_mr_diff', {
     project_id: String(projectId),
     mr_iid: mrIid,
   });
@@ -108,7 +97,7 @@ async function fetchFileContent(
   branch: string,
   filePath: string,
 ): Promise<string> {
-  const text = await callMcpTool(mcpGitlabUrl, 'gitlab_get_file', {
+  const text = await callMcpTool(WORKER_NAME, mcpGitlabUrl, 'gitlab_get_file', {
     project_id: String(projectId),
     file_path: filePath,
     ref: branch,
@@ -144,7 +133,7 @@ async function generateFix(
   fileDiff: string,
   feedback: BlockingFeedback,
 ): Promise<string | null> {
-  const lineRef = feedback.line != null ? ` (line ${feedback.line})` : '';
+  const lineRef = feedback.line === null ? '' : ` (line ${feedback.line})`;
   const diffSection = fileDiff
     ? `\n\n### Diff introducing this file\n\`\`\`diff\n${fileDiff}\n\`\`\``
     : '';
@@ -192,7 +181,7 @@ async function commitFix(
   feedbackMessage: string,
 ): Promise<void> {
   const summary = feedbackMessage.length > 72 ? feedbackMessage.slice(0, 72) : feedbackMessage;
-  await callMcpTool(mcpGitlabUrl, 'gitlab_commit_files', {
+  await callMcpTool(WORKER_NAME, mcpGitlabUrl, 'gitlab_commit_files', {
     project_id: String(projectId),
     branch,
     commit_message: `fix: [BLOQUANT] ${summary}`,
@@ -210,7 +199,7 @@ export async function fixCode(input: FixCodeInput): Promise<FixCodeOutput> {
   if (feedbacks.length === 0) return { fixed: 0, skipped: 0 };
 
   const diff = await fetchMrDiff(mcpGitlabUrl, input.projectId, input.mrIid);
-  const client = anthropicClient();
+  const client = createAnthropicClient();
   let fixed = 0;
   let skipped = 0;
 
