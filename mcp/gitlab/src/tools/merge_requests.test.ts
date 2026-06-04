@@ -246,6 +246,29 @@ describe('handleGetMr()', () => {
     expect(parsed.comments[0].body).toBe('hi')
   })
 
+  it('includes position data for inline notes', async () => {
+    const mr = { iid: 3, title: 'T', state: 'opened', labels: [], changes_count: '1', merge_status: 'can_be_merged', web_url: 'u', diff_refs: null }
+    const position = { new_path: 'src/foo.ts', old_path: 'src/foo.ts', new_line: 42, old_line: null }
+    const notes = [
+      { id: 10, body: '[BLOQUANT] Null dereference', system: false, author: { id: 1, username: 'bot', name: 'Bot' }, created_at: '2026-01-01', position },
+    ]
+    const client = { get: vi.fn().mockResolvedValueOnce(mr).mockResolvedValueOnce(notes) } as unknown as GitLabClient
+    const result = await handleGetMr(client, { project_id: '3', mr_iid: 3 })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.comments[0].position).toEqual(position)
+  })
+
+  it('returns position: null for notes without position', async () => {
+    const mr = { iid: 4, title: 'T', state: 'opened', labels: [], changes_count: '1', merge_status: 'can_be_merged', web_url: 'u', diff_refs: null }
+    const notes = [
+      { id: 11, body: 'general comment', system: false, author: { id: 1, username: 'a', name: 'A' }, created_at: '2026-01-01' },
+    ]
+    const client = { get: vi.fn().mockResolvedValueOnce(mr).mockResolvedValueOnce(notes) } as unknown as GitLabClient
+    const result = await handleGetMr(client, { project_id: '3', mr_iid: 4 })
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.comments[0].position).toBeNull()
+  })
+
   it('returns errorResponse on API error', async () => {
     const client = { get: vi.fn().mockRejectedValue(new GitLabApiError('not found', 404, 'GITLAB_NOT_FOUND')) } as unknown as GitLabClient
     const result = await handleGetMr(client, { project_id: '3', mr_iid: 99 })
