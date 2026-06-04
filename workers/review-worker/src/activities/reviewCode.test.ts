@@ -38,7 +38,7 @@ vi.mock('@anthropic-ai/sdk', () => ({
 }));
 
 import { reviewCode } from './reviewCode.js';
-import type { ReviewComment } from './reviewCode.js';
+import type { ReviewComment } from '@factory/worker-shared';
 
 const DIFF_FIXTURE = [
   {
@@ -111,6 +111,10 @@ describe('reviewCode', () => {
       description: expect.any(String),
       classification: 'esthétique',
     });
+    expect(result.bloquant).toBe(0);
+    expect(result.modéré).toBe(0);
+    expect(result.esthétique).toBe(1);
+    expect(result.backlogIssueIids).toEqual([]);
   });
 
   it('calls submit_review tool via tool_choice', async () => {
@@ -174,6 +178,7 @@ describe('reviewCode', () => {
     const result = await reviewCode(INPUT);
 
     expect(result.comments[0].line).toBeNull();
+    expect(result.backlogIssueIids).toEqual([1]);
   });
 
   it('returns comments with valid classification values only', async () => {
@@ -199,6 +204,9 @@ describe('reviewCode', () => {
     for (const comment of result.comments) {
       expect(validClassifications).toContain(comment.classification);
     }
+    expect(result.bloquant).toBe(1);
+    expect(result.modéré).toBe(1);
+    expect(result.esthétique).toBe(1);
   });
 
   it('throws ApplicationFailure(MissingConfigError) when ANTHROPIC_API_KEY is absent', async () => {
@@ -449,6 +457,76 @@ describe('reviewCode', () => {
       expect.objectContaining({ file: 'src/a.ts', line: 5 }),
     );
     expect(result.comments).toHaveLength(1);
+    expect(result.backlogIssueIids).toEqual([]);
+  });
+
+  // --- US-6 tests ---
+
+  it('bloquant/modéré/esthétique counts match comment classifications', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const comments: ReviewComment[] = [
+      { file: 'a.ts', line: 1, description: 'Bug A',    classification: 'bloquant' },
+      { file: 'b.ts', line: 2, description: 'Bug B',    classification: 'bloquant' },
+      { file: 'c.ts', line: 3, description: 'Improve',  classification: 'modéré' },
+      { file: 'd.ts', line: 4, description: 'Nit',      classification: 'esthétique' },
+    ];
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 3 }))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 4 }))  // summary
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 10, id: 10, web_url: 'http://localhost/...' })); // backlog
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
+
+    const result = await reviewCode(INPUT);
+
+    expect(result.bloquant).toBe(2);
+    expect(result.modéré).toBe(1);
+    expect(result.esthétique).toBe(1);
+  });
+
+  it('backlogIssueIids contains iid of each created backlog issue', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const comments: ReviewComment[] = [
+      { file: 'a.ts', line: 10, description: 'Missing error handling', classification: 'modéré' },
+      { file: 'b.ts', line: 20, description: 'No tests written',       classification: 'modéré' },
+    ];
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))  // inline a.ts
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))  // inline b.ts
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 3 }))  // summary
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 5, id: 5, web_url: 'http://localhost/...' }))  // issue a.ts
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 6, id: 6, web_url: 'http://localhost/...' })); // issue b.ts
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
+
+    const result = await reviewCode(INPUT);
+
+    expect(result.backlogIssueIids).toEqual([5, 6]);
+  });
+
+  it('backlogIssueIids excludes iid when creation fails', async () => {
+    process.env.ANTHROPIC_API_KEY = 'test-key';
+    const comments: ReviewComment[] = [
+      { file: 'a.ts', line: 10, description: 'First',  classification: 'modéré' },
+      { file: 'b.ts', line: 20, description: 'Second', classification: 'modéré' },
+    ];
+    mockCallTool
+      .mockResolvedValueOnce(makeMcpResponse(DIFF_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse(META_FIXTURE))
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 1 }))  // inline a.ts
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 2 }))  // inline b.ts
+      .mockResolvedValueOnce(makeMcpResponse({ note_id: 3 }))  // summary
+      .mockResolvedValueOnce({ content: [{ type: 'text', text: 'Forbidden' }], isError: true }) // issue a.ts fails
+      .mockResolvedValueOnce(makeMcpResponse({ iid: 7, id: 7, web_url: 'http://localhost/...' })); // issue b.ts ok
+    mockAnthropicCreate.mockResolvedValue(makeAnthropicResponse(comments));
+
+    const result = await reviewCode(INPUT);
+
+    expect(result.backlogIssueIids).toEqual([7]);
   });
 
   it('summary body contains a count table with correct totals and file-level comment', async () => {

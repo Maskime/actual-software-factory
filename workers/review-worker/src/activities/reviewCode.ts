@@ -2,6 +2,7 @@ import { ApplicationFailure, log } from '@temporalio/activity';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 import Anthropic from '@anthropic-ai/sdk';
+import type { ReviewComment, ReviewAgentOutput } from '@factory/worker-shared';
 
 export interface ReviewCodeInput {
   mrIid: number;
@@ -23,17 +24,6 @@ export interface MrContext {
   title: string;
   description: string;
   diff: MrFileChange[];
-}
-
-export interface ReviewComment {
-  file: string;
-  line: number | null;
-  description: string;
-  classification: 'bloquant' | 'modéré' | 'esthétique';
-}
-
-export interface ReviewAgentOutput {
-  comments: ReviewComment[];
 }
 
 type McpContent = { type: string; text?: string };
@@ -160,20 +150,23 @@ async function createBacklogIssue(
   projectId: number,
   mrWebUrl: string,
   comment: ReviewComment,
-): Promise<void> {
+): Promise<number | null> {
   const fileRef = comment.line === null ? comment.file : `${comment.file}:${comment.line}`;
   const rawTitle = `[Backlog] ${fileRef} — ${comment.description}`;
   const title = rawTitle.length > 200 ? rawTitle.slice(0, 200) : rawTitle;
   const description = `${comment.description}\n\n**MR :** ${mrWebUrl}\n**Fichier :** \`${fileRef}\``;
   try {
-    await callMcpTool(mcpGitlabUrl, 'gitlab_create_issue', {
+    const raw = await callMcpTool(mcpGitlabUrl, 'gitlab_create_issue', {
       project_id: String(projectId),
       title,
       description,
       labels: 'backlog',
     });
+    const issue = JSON.parse(raw || '{}') as { iid?: number };
+    return issue.iid ?? null;
   } catch (error) {
     log.warn('Failed to create backlog issue', { file: comment.file, line: comment.line, error });
+    return null;
   }
 }
 
@@ -182,11 +175,14 @@ async function createBacklogIssues(
   projectId: number,
   mrWebUrl: string,
   comments: ReviewComment[],
-): Promise<void> {
+): Promise<number[]> {
   const moderate = comments.filter((c) => c.classification === 'modéré');
+  const iids: number[] = [];
   for (const comment of moderate) {
-    await createBacklogIssue(mcpGitlabUrl, projectId, mrWebUrl, comment);
+    const iid = await createBacklogIssue(mcpGitlabUrl, projectId, mrWebUrl, comment);
+    if (iid !== null) iids.push(iid);
   }
+  return iids;
 }
 
 async function publishComments(
@@ -370,13 +366,13 @@ export async function reviewCode(input: ReviewCodeInput): Promise<ReviewAgentOut
   const comments = await analyzeWithClaude(client, anthropicModel, mrContext);
 
   await publishComments(mcpGitlabUrl, input.projectId, input.mrIid, comments);
-  await createBacklogIssues(mcpGitlabUrl, input.projectId, metadata.webUrl, comments);
+  const backlogIssueIids = await createBacklogIssues(mcpGitlabUrl, input.projectId, metadata.webUrl, comments);
 
-  log.info('Review completed', {
-    mrIid: input.mrIid,
-    total: comments.length,
-    bloquant: comments.filter((c) => c.classification === 'bloquant').length,
-  });
+  const bloquant   = comments.filter((c) => c.classification === 'bloquant').length;
+  const modéré     = comments.filter((c) => c.classification === 'modéré').length;
+  const esthétique = comments.filter((c) => c.classification === 'esthétique').length;
 
-  return { comments };
+  log.info('Review completed', { mrIid: input.mrIid, total: comments.length, bloquant });
+
+  return { comments, bloquant, modéré, esthétique, backlogIssueIids };
 }

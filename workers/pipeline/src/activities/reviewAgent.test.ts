@@ -6,6 +6,8 @@ const input: ReviewAgentInput = { issueIid: 1, projectId: 3, mrIid: 10, branchNa
 
 describe('reviewCode proxy stub', () => {
   it('resolves to empty ReviewAgentOutput (type stub — dispatched to review-agent queue at runtime)', async () => {
-    await expect(reviewCode(input)).resolves.toEqual({ comments: [] })
+    await expect(reviewCode(input)).resolves.toEqual({
+      comments: [], bloquant: 0, modéré: 0, esthétique: 0, backlogIssueIids: [],
+    })
   })
 })

@@ -9,3 +9,18 @@ export function createHealthServer(port: number): Server {
     }
   }).listen(port);
 }
+
+export interface ReviewComment {
+  file: string;
+  line: number | null;
+  description: string;
+  classification: 'bloquant' | 'modéré' | 'esthétique';
+}
+
+export interface ReviewAgentOutput {
+  comments: ReviewComment[];
+  bloquant: number;
+  modéré: number;
+  esthétique: number;
+  backlogIssueIids: number[];
+}
