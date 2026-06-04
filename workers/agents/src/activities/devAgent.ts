@@ -5,6 +5,7 @@ import { rm } from 'node:fs/promises';
 import Anthropic from '@anthropic-ai/sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
+import { auditLog, summarize, type AuditContext } from '@factory/worker-shared';
 import { setupWorkspace } from './setupWorkspace.js';
 import { AGENT_TOOLS, executeTool } from '../tools.js';
 import type { DevAgentOutput, IssueContext, WorkspaceContext } from '../types.js';
@@ -127,7 +128,7 @@ async function runAgentLoop(
   }
 }
 
-async function generatePlan(issue: IssueContext, workDir: string): Promise<string> {
+async function generatePlan(issue: IssueContext, workDir: string, auditCtx?: AuditContext): Promise<string> {
   const client = anthropicClient();
   const { model } = devConfig();
 
@@ -180,10 +181,22 @@ Produce a detailed implementation plan.`,
     .join('\n');
 
   log.info('Plan generated', { issueTitle: issue.title, planLength: plan.length });
+  if (auditCtx) {
+    auditLog({
+      timestamp: new Date().toISOString(),
+      workflowId: auditCtx.workflowId,
+      activityName: auditCtx.activityName,
+      agent: 'agent-worker',
+      eventType: 'llm_call',
+      tool: 'claude/messages.create',
+      inputSummary: summarize(`generatePlan: ${issue.title}`),
+      outputSummary: summarize(`plan length: ${plan.length} chars`),
+    });
+  }
   return plan;
 }
 
-async function critiquePlan(issue: IssueContext, plan: string): Promise<CritiqueResult> {
+async function critiquePlan(issue: IssueContext, plan: string, auditCtx?: AuditContext): Promise<CritiqueResult> {
   const client = anthropicClient();
   const { model } = devConfig();
 
@@ -236,11 +249,24 @@ Classify all issues with the plan.`,
   try {
     const stripped = raw.replace(/^```[a-z]*\n?/m, '').replace(/```$/m, '').trim();
     const parsed = JSON.parse(stripped) as CritiqueResult;
-    return {
+    const result = {
       grave: Array.isArray(parsed.grave) ? parsed.grave : [],
       moderate: Array.isArray(parsed.moderate) ? parsed.moderate : [],
       esthetic: Array.isArray(parsed.esthetic) ? parsed.esthetic : [],
     };
+    if (auditCtx) {
+      auditLog({
+        timestamp: new Date().toISOString(),
+        workflowId: auditCtx.workflowId,
+        activityName: auditCtx.activityName,
+        agent: 'agent-worker',
+        eventType: 'llm_call',
+        tool: 'claude/messages.create',
+        inputSummary: summarize(`critiquePlan: ${issue.title}`),
+        outputSummary: summarize(`grave:${result.grave.length} moderate:${result.moderate.length} esthetic:${result.esthetic.length}`),
+      });
+    }
+    return result;
   } catch {
     log.warn('Critique JSON parse failed — continuing with empty critique', { raw });
     return { grave: [], moderate: [], esthetic: [] };
@@ -251,7 +277,8 @@ async function createBacklogIssue(
   projectId: number,
   mcpGitlabUrl: string,
   title: string,
-  description: string
+  description: string,
+  auditCtx?: AuditContext,
 ): Promise<void> {
   const mcpClient = new Client({ name: 'agent-worker', version: '0.1.0' });
   const transport = new StreamableHTTPClientTransport(new URL(mcpGitlabUrl));
@@ -259,13 +286,23 @@ async function createBacklogIssue(
   try {
     type ToolContent = { type: string; text?: string };
     type ToolResult = { content: ToolContent[]; isError?: boolean };
-    const result = (await mcpClient.callTool({
-      name: 'gitlab_create_issue',
-      arguments: { project_id: String(projectId), title, description, labels: 'backlog' },
-    })) as ToolResult;
+    const args = { project_id: String(projectId), title, description, labels: 'backlog' };
+    const result = (await mcpClient.callTool({ name: 'gitlab_create_issue', arguments: args })) as ToolResult;
+    const resultText = result.content.find((c) => c.type === 'text')?.text ?? '';
     if (result.isError) {
-      const text = result.content.find((c) => c.type === 'text')?.text ?? '';
-      log.warn('Failed to create backlog issue', { title, error: text });
+      log.warn('Failed to create backlog issue', { title, error: resultText });
+    }
+    if (auditCtx) {
+      auditLog({
+        timestamp: new Date().toISOString(),
+        workflowId: auditCtx.workflowId,
+        activityName: auditCtx.activityName,
+        agent: 'agent-worker',
+        eventType: 'mcp_call',
+        tool: 'gitlab_create_issue',
+        inputSummary: summarize(args),
+        outputSummary: summarize(resultText),
+      });
     }
   } finally {
     await mcpClient.close();
@@ -277,7 +314,8 @@ async function revisePlan(
   critique: CritiqueResult,
   issue: IssueContext,
   projectId: number,
-  mcpGitlabUrl: string
+  mcpGitlabUrl: string,
+  auditCtx?: AuditContext,
 ): Promise<string> {
   for (const item of critique.moderate) {
     try {
@@ -285,7 +323,8 @@ async function revisePlan(
         projectId,
         mcpGitlabUrl,
         `[Backlog] ${issue.title} — ${item.slice(0, 80)}`,
-        `Technical debt identified during dev agent plan review.\n\n**Original issue**: ${issue.title}\n\n**Item**: ${item}`
+        `Technical debt identified during dev agent plan review.\n\n**Original issue**: ${issue.title}\n\n**Item**: ${item}`,
+        auditCtx,
       );
     } catch (err) {
       log.warn('Could not create backlog issue', {
@@ -321,10 +360,24 @@ Output the revised plan only.`,
     ],
   });
 
-  return response.content
+  const revised = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === 'text')
     .map((b) => b.text)
     .join('\n');
+
+  if (auditCtx) {
+    auditLog({
+      timestamp: new Date().toISOString(),
+      workflowId: auditCtx.workflowId,
+      activityName: auditCtx.activityName,
+      agent: 'agent-worker',
+      eventType: 'llm_call',
+      tool: 'claude/messages.create',
+      inputSummary: summarize(`revisePlan: ${issue.title} — ${critique.grave.length} grave issue(s)`),
+      outputSummary: summarize(`revised plan length: ${revised.length} chars`),
+    });
+  }
+  return revised;
 }
 
 async function implementPlan(
@@ -510,7 +563,8 @@ async function createMergeRequest(
   issueTitle: string,
   branchName: string,
   description: string,
-  mcpGitlabUrl: string
+  mcpGitlabUrl: string,
+  auditCtx?: AuditContext,
 ): Promise<{ iid: number; web_url: string }> {
   const mcpClient = new Client({ name: 'agent-worker', version: '0.1.0' });
   const transport = new StreamableHTTPClientTransport(new URL(mcpGitlabUrl));
@@ -518,23 +572,32 @@ async function createMergeRequest(
   try {
     type ToolContent = { type: string; text?: string };
     type ToolResult = { content: ToolContent[]; isError?: boolean };
-    const result = (await mcpClient.callTool({
-      name: 'gitlab_create_mr',
-      arguments: {
-        project_id: String(projectId),
-        source_branch: branchName,
-        target_branch: 'main',
-        title: issueTitle,
-        description,
-      },
-    })) as ToolResult;
+    const args = {
+      project_id: String(projectId),
+      source_branch: branchName,
+      target_branch: 'main',
+      title: issueTitle,
+      description,
+    };
+    const result = (await mcpClient.callTool({ name: 'gitlab_create_mr', arguments: args })) as ToolResult;
+    const text = result.content.find((c) => c.type === 'text')?.text ?? '';
     if (result.isError) {
-      const text = result.content.find((c) => c.type === 'text')?.text ?? '';
       throw ApplicationFailure.nonRetryable(`MR creation failed: ${text}`, 'MrCreationError');
     }
-    const text = result.content.find((c) => c.type === 'text')?.text ?? '';
     const data = JSON.parse(text) as { iid: number; web_url: string };
     log.info('MR created', { issueIid, mrIid: data.iid, url: data.web_url });
+    if (auditCtx) {
+      auditLog({
+        timestamp: new Date().toISOString(),
+        workflowId: auditCtx.workflowId,
+        activityName: auditCtx.activityName,
+        agent: 'agent-worker',
+        eventType: 'mcp_call',
+        tool: 'gitlab_create_mr',
+        inputSummary: summarize({ ...args, description: '…' }),
+        outputSummary: summarize(`mrIid:${data.iid} url:${data.web_url}`),
+      });
+    }
     return data;
   } finally {
     await mcpClient.close();
@@ -544,6 +607,10 @@ async function createMergeRequest(
 export async function runDevAgent(input: DevAgentInput): Promise<DevAgentOutput> {
   const info = activityInfo();
   const workflowRunId = info.workflowExecution?.runId ?? info.activityId;
+  const auditCtx: AuditContext = {
+    workflowId: info.workflowExecution?.workflowId ?? info.activityId,
+    activityName: 'runDevAgent',
+  };
   const workDir = `/tmp/factory/${workflowRunId}`;
 
   log.info('Dev agent starting', { issueIid: input.issueIid, workDir });
@@ -573,10 +640,10 @@ export async function runDevAgent(input: DevAgentInput): Promise<DevAgentOutput>
     const { mcpGitlabUrl } = devConfig();
 
     log.info('Generating implementation plan', { issueIid: input.issueIid });
-    const plan = await generatePlan(ctx.issue, workDir);
+    const plan = await generatePlan(ctx.issue, workDir, auditCtx);
 
     log.info('Critiquing plan', { issueIid: input.issueIid });
-    const critique = await critiquePlan(ctx.issue, plan);
+    const critique = await critiquePlan(ctx.issue, plan, auditCtx);
     log.info('Critique complete', {
       grave: critique.grave.length,
       moderate: critique.moderate.length,
@@ -584,7 +651,7 @@ export async function runDevAgent(input: DevAgentInput): Promise<DevAgentOutput>
     });
 
     log.info('Revising plan', { issueIid: input.issueIid });
-    const revisedPlan = await revisePlan(plan, critique, ctx.issue, input.projectId, mcpGitlabUrl);
+    const revisedPlan = await revisePlan(plan, critique, ctx.issue, input.projectId, mcpGitlabUrl, auditCtx);
 
     log.info('Implementing plan', { issueIid: input.issueIid });
     await implementPlan(revisedPlan, ctx.issue, workDir);
@@ -613,6 +680,7 @@ export async function runDevAgent(input: DevAgentInput): Promise<DevAgentOutput>
       branchName,
       mrDescription,
       mcpGitlabUrl,
+      auditCtx,
     );
 
     log.info('Dev agent completed successfully', { issueIid: input.issueIid });

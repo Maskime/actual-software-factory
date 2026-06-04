@@ -1,6 +1,9 @@
-import { ApplicationFailure, log } from '@temporalio/activity';
+import { ApplicationFailure, activityInfo, log } from '@temporalio/activity';
 import Anthropic from '@anthropic-ai/sdk';
-import { callMcpTool as sharedCallMcpTool, type ReviewComment, type ReviewAgentOutput } from '@factory/worker-shared';
+import {
+  callMcpTool as sharedCallMcpTool, auditLog, summarize,
+  type ReviewComment, type ReviewAgentOutput, type AuditContext,
+} from '@factory/worker-shared';
 
 export interface ReviewCodeInput {
   mrIid: number;
@@ -58,8 +61,13 @@ function anthropicClient(): Anthropic {
   return new Anthropic({ apiKey });
 }
 
-function callMcpTool(mcpGitlabUrl: string, toolName: string, args: Record<string, unknown>): Promise<string> {
-  return sharedCallMcpTool('review-worker', mcpGitlabUrl, toolName, args);
+function callMcpTool(
+  mcpGitlabUrl: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  auditCtx?: AuditContext,
+): Promise<string> {
+  return sharedCallMcpTool('review-worker', mcpGitlabUrl, toolName, args, auditCtx);
 }
 
 async function postInlineComment(
@@ -67,6 +75,7 @@ async function postInlineComment(
   projectId: number,
   mrIid: number,
   comment: ReviewComment & { line: number },
+  auditCtx?: AuditContext,
 ): Promise<void> {
   const body = `${classificationPrefix(comment.classification)} ${comment.description}`;
   try {
@@ -76,7 +85,7 @@ async function postInlineComment(
       body,
       file_path: comment.file,
       new_line: comment.line,
-    });
+    }, auditCtx);
   } catch (error) {
     log.warn('Failed to post inline comment', { file: comment.file, line: comment.line, error });
   }
@@ -115,13 +124,14 @@ async function postSummaryComment(
   projectId: number,
   mrIid: number,
   comments: ReviewComment[],
+  auditCtx?: AuditContext,
 ): Promise<void> {
   const body = buildSummaryBody(comments);
   await callMcpTool(mcpGitlabUrl, 'gitlab_add_mr_comment', {
     project_id: String(projectId),
     mr_iid: mrIid,
     body,
-  });
+  }, auditCtx);
 }
 
 async function createBacklogIssue(
@@ -129,6 +139,7 @@ async function createBacklogIssue(
   projectId: number,
   mrWebUrl: string,
   comment: ReviewComment,
+  auditCtx?: AuditContext,
 ): Promise<number | null> {
   const fileRef = comment.line === null ? comment.file : `${comment.file}:${comment.line}`;
   const rawTitle = `[Backlog] ${fileRef} — ${comment.description}`;
@@ -140,7 +151,7 @@ async function createBacklogIssue(
       title,
       description,
       labels: 'backlog',
-    });
+    }, auditCtx);
     const issue = JSON.parse(raw || '{}') as { iid?: number };
     return issue.iid ?? null;
   } catch (error) {
@@ -154,11 +165,12 @@ async function createBacklogIssues(
   projectId: number,
   mrWebUrl: string,
   comments: ReviewComment[],
+  auditCtx?: AuditContext,
 ): Promise<number[]> {
   const moderate = comments.filter((c) => c.classification === 'modéré');
   const iids: number[] = [];
   for (const comment of moderate) {
-    const iid = await createBacklogIssue(mcpGitlabUrl, projectId, mrWebUrl, comment);
+    const iid = await createBacklogIssue(mcpGitlabUrl, projectId, mrWebUrl, comment, auditCtx);
     if (iid !== null) iids.push(iid);
   }
   return iids;
@@ -169,24 +181,26 @@ async function publishComments(
   projectId: number,
   mrIid: number,
   comments: ReviewComment[],
+  auditCtx?: AuditContext,
 ): Promise<void> {
   for (const comment of comments) {
     if (comment.line !== null) {
-      await postInlineComment(mcpGitlabUrl, projectId, mrIid, comment as ReviewComment & { line: number });
+      await postInlineComment(mcpGitlabUrl, projectId, mrIid, comment as ReviewComment & { line: number }, auditCtx);
     }
   }
-  await postSummaryComment(mcpGitlabUrl, projectId, mrIid, comments);
+  await postSummaryComment(mcpGitlabUrl, projectId, mrIid, comments, auditCtx);
 }
 
 async function readMrDiff(
   mcpGitlabUrl: string,
   projectId: number,
   mrIid: number,
+  auditCtx?: AuditContext,
 ): Promise<MrFileChange[]> {
   const text = await callMcpTool(mcpGitlabUrl, 'gitlab_get_mr_diff', {
     project_id: String(projectId),
     mr_iid: mrIid,
-  });
+  }, auditCtx);
   return JSON.parse(text || '[]') as MrFileChange[];
 }
 
@@ -194,11 +208,12 @@ async function readMrMetadata(
   mcpGitlabUrl: string,
   projectId: number,
   mrIid: number,
+  auditCtx?: AuditContext,
 ): Promise<{ title: string; description: string; webUrl: string }> {
   const text = await callMcpTool(mcpGitlabUrl, 'gitlab_get_mr', {
     project_id: String(projectId),
     mr_iid: mrIid,
-  });
+  }, auditCtx);
   const mr = JSON.parse(text || '{}') as { title: string; description: string; web_url?: string };
   return { title: mr.title, description: mr.description ?? '', webUrl: mr.web_url ?? '' };
 }
@@ -313,6 +328,12 @@ ${formattedDiff}`,
 }
 
 export async function reviewCode(input: ReviewCodeInput): Promise<ReviewAgentOutput> {
+  const info = activityInfo();
+  const auditCtx: AuditContext = {
+    workflowId: info.workflowExecution?.workflowId ?? info.activityId,
+    activityName: 'reviewCode',
+  };
+
   log.info('Review agent starting', {
     mrIid: input.mrIid,
     projectId: input.projectId,
@@ -323,8 +344,8 @@ export async function reviewCode(input: ReviewCodeInput): Promise<ReviewAgentOut
   const { mcpGitlabUrl, anthropicModel } = reviewConfig();
 
   const [diff, metadata] = await Promise.all([
-    readMrDiff(mcpGitlabUrl, input.projectId, input.mrIid),
-    readMrMetadata(mcpGitlabUrl, input.projectId, input.mrIid),
+    readMrDiff(mcpGitlabUrl, input.projectId, input.mrIid, auditCtx),
+    readMrMetadata(mcpGitlabUrl, input.projectId, input.mrIid, auditCtx),
   ]);
 
   if (diff.length === 0) {
@@ -342,10 +363,31 @@ export async function reviewCode(input: ReviewCodeInput): Promise<ReviewAgentOut
 
   const client = anthropicClient();
   const mrContext: MrContext = { title: metadata.title, description: metadata.description, diff };
-  const comments = await analyzeWithClaude(client, anthropicModel, mrContext);
 
-  await publishComments(mcpGitlabUrl, input.projectId, input.mrIid, comments);
-  const backlogIssueIids = await createBacklogIssues(mcpGitlabUrl, input.projectId, metadata.webUrl, comments);
+  auditLog({
+    timestamp: new Date().toISOString(),
+    workflowId: auditCtx.workflowId,
+    activityName: auditCtx.activityName,
+    agent: 'review-worker',
+    eventType: 'llm_call',
+    tool: 'claude/messages.create',
+    inputSummary: summarize(`${mrContext.title} — ${diff.length} file(s)`),
+    outputSummary: '',
+  });
+  const comments = await analyzeWithClaude(client, anthropicModel, mrContext);
+  auditLog({
+    timestamp: new Date().toISOString(),
+    workflowId: auditCtx.workflowId,
+    activityName: auditCtx.activityName,
+    agent: 'review-worker',
+    eventType: 'llm_call',
+    tool: 'claude/messages.create',
+    inputSummary: summarize(`${mrContext.title} — ${diff.length} file(s)`),
+    outputSummary: summarize(`${comments.length} comment(s)`),
+  });
+
+  await publishComments(mcpGitlabUrl, input.projectId, input.mrIid, comments, auditCtx);
+  const backlogIssueIids = await createBacklogIssues(mcpGitlabUrl, input.projectId, metadata.webUrl, comments, auditCtx);
 
   const bloquant   = comments.filter((c) => c.classification === 'bloquant').length;
   const modéré     = comments.filter((c) => c.classification === 'modéré').length;

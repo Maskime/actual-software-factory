@@ -1,6 +1,6 @@
-import { log } from '@temporalio/activity';
+import { activityInfo, log } from '@temporalio/activity';
 import Anthropic from '@anthropic-ai/sdk';
-import { callMcpTool, createAnthropicClient } from '@factory/worker-shared';
+import { callMcpTool, createAnthropicClient, auditLog, summarize, type AuditContext } from '@factory/worker-shared';
 
 export interface FixCodeInput {
   issueIid: number;
@@ -61,11 +61,12 @@ async function fetchBlockingComments(
   mcpGitlabUrl: string,
   projectId: number,
   mrIid: number,
+  auditCtx?: AuditContext,
 ): Promise<BlockingFeedback[]> {
   const text = await callMcpTool(WORKER_NAME, mcpGitlabUrl, 'gitlab_get_mr', {
     project_id: String(projectId),
     mr_iid: mrIid,
-  });
+  }, auditCtx);
 
   const mr = JSON.parse(text || '{}') as MrResponse;
   const notes = mr.comments ?? [];
@@ -83,11 +84,12 @@ async function fetchMrDiff(
   mcpGitlabUrl: string,
   projectId: number,
   mrIid: number,
+  auditCtx?: AuditContext,
 ): Promise<MrFileChange[]> {
   const text = await callMcpTool(WORKER_NAME, mcpGitlabUrl, 'gitlab_get_mr_diff', {
     project_id: String(projectId),
     mr_iid: mrIid,
-  });
+  }, auditCtx);
   return JSON.parse(text || '[]') as MrFileChange[];
 }
 
@@ -96,12 +98,13 @@ async function fetchFileContent(
   projectId: number,
   branch: string,
   filePath: string,
+  auditCtx?: AuditContext,
 ): Promise<string> {
   const text = await callMcpTool(WORKER_NAME, mcpGitlabUrl, 'gitlab_get_file', {
     project_id: String(projectId),
     file_path: filePath,
     ref: branch,
-  });
+  }, auditCtx);
   const response = JSON.parse(text || '{}') as GitLabFileResponse;
   return response.content ?? '';
 }
@@ -179,6 +182,7 @@ async function commitFix(
   filePath: string,
   content: string,
   feedbackMessage: string,
+  auditCtx?: AuditContext,
 ): Promise<void> {
   const summary = feedbackMessage.length > 72 ? feedbackMessage.slice(0, 72) : feedbackMessage;
   await callMcpTool(WORKER_NAME, mcpGitlabUrl, 'gitlab_commit_files', {
@@ -186,19 +190,25 @@ async function commitFix(
     branch,
     commit_message: `fix: [BLOQUANT] ${summary}`,
     actions: [{ action: 'update', file_path: filePath, content }],
-  });
+  }, auditCtx);
 }
 
 export async function fixCode(input: FixCodeInput): Promise<FixCodeOutput> {
+  const info = activityInfo();
+  const auditCtx: AuditContext = {
+    workflowId: info.workflowExecution?.workflowId ?? info.activityId,
+    activityName: 'fixCode',
+  };
+
   log.info('Fix-review agent starting', { mrIid: input.mrIid, projectId: input.projectId });
   const { mcpGitlabUrl, anthropicModel } = fixConfig();
 
-  const feedbacks = await fetchBlockingComments(mcpGitlabUrl, input.projectId, input.mrIid);
+  const feedbacks = await fetchBlockingComments(mcpGitlabUrl, input.projectId, input.mrIid, auditCtx);
   log.info('Blocking comments fetched', { count: feedbacks.length, mrIid: input.mrIid });
 
   if (feedbacks.length === 0) return { fixed: 0, skipped: 0 };
 
-  const diff = await fetchMrDiff(mcpGitlabUrl, input.projectId, input.mrIid);
+  const diff = await fetchMrDiff(mcpGitlabUrl, input.projectId, input.mrIid, auditCtx);
   const client = createAnthropicClient();
   let fixed = 0;
   let skipped = 0;
@@ -210,16 +220,37 @@ export async function fixCode(input: FixCodeInput): Promise<FixCodeOutput> {
       continue;
     }
 
-    const fileContent  = await fetchFileContent(mcpGitlabUrl, input.projectId, input.branchName, feedback.file);
+    const fileContent  = await fetchFileContent(mcpGitlabUrl, input.projectId, input.branchName, feedback.file, auditCtx);
     const fileDiff     = findFileDiff(diff, feedback.file);
+
+    auditLog({
+      timestamp: new Date().toISOString(),
+      workflowId: auditCtx.workflowId,
+      activityName: auditCtx.activityName,
+      agent: WORKER_NAME,
+      eventType: 'llm_call',
+      tool: 'claude/messages.create',
+      inputSummary: summarize(`fix ${feedback.file}: ${feedback.message}`),
+      outputSummary: '',
+    });
     const fixedContent = await generateFix(client, anthropicModel, feedback.file, fileContent, fileDiff, feedback);
+    auditLog({
+      timestamp: new Date().toISOString(),
+      workflowId: auditCtx.workflowId,
+      activityName: auditCtx.activityName,
+      agent: WORKER_NAME,
+      eventType: 'llm_call',
+      tool: 'claude/messages.create',
+      inputSummary: summarize(`fix ${feedback.file}: ${feedback.message}`),
+      outputSummary: fixedContent ? summarize(`fixed ${feedback.file}`) : 'no fix produced',
+    });
 
     if (!fixedContent) {
       skipped++;
       continue;
     }
 
-    await commitFix(mcpGitlabUrl, input.projectId, input.branchName, feedback.file, fixedContent, feedback.message);
+    await commitFix(mcpGitlabUrl, input.projectId, input.branchName, feedback.file, fixedContent, feedback.message, auditCtx);
     log.info('Fix committed', { file: feedback.file, mrIid: input.mrIid });
     fixed++;
   }

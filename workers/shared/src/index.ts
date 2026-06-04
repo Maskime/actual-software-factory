@@ -17,11 +17,34 @@ export function createHealthServer(port: number): Server {
 type McpContent = { type: string; text?: string };
 type McpToolResult = { content: McpContent[]; isError?: boolean };
 
+export interface AuditEntry {
+  timestamp: string;
+  workflowId: string;
+  activityName: string;
+  agent: string;
+  eventType: 'mcp_call' | 'llm_call';
+  tool: string;
+  inputSummary: string;
+  outputSummary: string;
+}
+
+export function summarize(value: unknown, maxLength = 300): string {
+  const s = typeof value === 'string' ? value : JSON.stringify(value);
+  return s.length > maxLength ? `${s.slice(0, maxLength)}…` : s;
+}
+
+export function auditLog(entry: AuditEntry): void {
+  console.log(JSON.stringify(entry));
+}
+
+export type AuditContext = { workflowId: string; activityName: string };
+
 export async function callMcpTool(
   workerName: string,
   mcpUrl: string,
   toolName: string,
   args: Record<string, unknown>,
+  auditCtx?: AuditContext,
 ): Promise<string> {
   const client = new Client({ name: workerName, version: '0.1.0' });
   const transport = new StreamableHTTPClientTransport(new URL(mcpUrl));
@@ -32,7 +55,20 @@ export async function callMcpTool(
       const text = result.content.find((c) => c.type === 'text')?.text ?? '';
       throw ApplicationFailure.nonRetryable(`${toolName} failed: ${text}`, 'McpToolError');
     }
-    return result.content.find((c) => c.type === 'text')?.text ?? '';
+    const resultText = result.content.find((c) => c.type === 'text')?.text ?? '';
+    if (auditCtx) {
+      auditLog({
+        timestamp: new Date().toISOString(),
+        workflowId: auditCtx.workflowId,
+        activityName: auditCtx.activityName,
+        agent: workerName,
+        eventType: 'mcp_call',
+        tool: toolName,
+        inputSummary: summarize(args),
+        outputSummary: summarize(resultText),
+      });
+    }
+    return resultText;
   } finally {
     await client.close();
   }
