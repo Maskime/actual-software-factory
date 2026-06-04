@@ -161,7 +161,7 @@ async function createBacklogIssue(
   mrWebUrl: string,
   comment: ReviewComment,
 ): Promise<void> {
-  const fileRef = comment.line !== null ? `${comment.file}:${comment.line}` : comment.file;
+  const fileRef = comment.line === null ? comment.file : `${comment.file}:${comment.line}`;
   const rawTitle = `[Backlog] ${fileRef} — ${comment.description}`;
   const title = rawTitle.length > 200 ? rawTitle.slice(0, 200) : rawTitle;
   const description = `${comment.description}\n\n**MR :** ${mrWebUrl}\n**Fichier :** \`${fileRef}\``;
