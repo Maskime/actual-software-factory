@@ -42,10 +42,14 @@ function backlogConfig(): { mcpGitlabUrl: string } {
   };
 }
 
+function computeFileRef(file: string | null, line: number | null): string {
+  if (file === null) return 'general';
+  if (line === null) return file;
+  return `${file}:${line}`;
+}
+
 function buildIssueTitle(file: string | null, line: number | null, description: string): string {
-  const fileRef = file === null
-    ? 'general'
-    : (line === null ? file : `${file}:${line}`);
+  const fileRef = computeFileRef(file, line);
   const rawTitle = `[Backlog] ${fileRef} — ${description}`;
   return rawTitle.length > 200 ? rawTitle.slice(0, 200) : rawTitle;
 }
@@ -102,7 +106,7 @@ export async function createBacklogIssues(
     const line = note.position?.new_line ?? note.position?.old_line ?? null;
     const description = note.body.slice(MODERE_PREFIX.length).trim();
 
-    const fileRef = file === null ? 'general' : (line === null ? file : `${file}:${line}`);
+    const fileRef = computeFileRef(file, line);
     const expectedTitle = buildIssueTitle(file, line, description);
 
     if (existingTitles.has(expectedTitle)) {
