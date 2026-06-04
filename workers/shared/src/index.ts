@@ -1,6 +1,7 @@
 import { createServer, type Server } from 'node:http';
 import { ApplicationFailure } from '@temporalio/activity';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
+import Anthropic from '@anthropic-ai/sdk';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
 
 export function createHealthServer(port: number): Server {
@@ -35,6 +36,14 @@ export async function callMcpTool(
   } finally {
     await client.close();
   }
+}
+
+export function createAnthropicClient(): Anthropic {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  if (!apiKey) {
+    throw ApplicationFailure.nonRetryable('ANTHROPIC_API_KEY is not set', 'MissingConfigError');
+  }
+  return new Anthropic({ apiKey });
 }
 
 export interface ReviewComment {
