@@ -63,7 +63,7 @@ const APPLY_FIX_TOOL: Anthropic.Tool = {
 
 function buildIssueList(issues: SonarIssue[]): string {
   return issues.map((i) => {
-    const lineRef = i.line !== undefined ? ` (line ${i.line})` : '';
+    const lineRef = i.line === undefined ? '' : ` (line ${i.line})`;
     return `- [${i.key}] ${i.type} / ${i.severity}${lineRef}: ${i.message}`;
   }).join('\n');
 }
