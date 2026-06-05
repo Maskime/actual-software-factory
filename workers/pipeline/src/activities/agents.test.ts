@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import {
-  runDevAgent, runFixReviewAgent,
-  runFixStaticAgent, runMergeAgent,
+  runDevAgent, runFixReviewAgent, runMergeAgent,
 } from './agents.js'
 import type { PipelineInput } from '../types.js'
 
@@ -13,9 +12,6 @@ describe('agent stubs', () => {
   })
   it('runFixReviewAgent resolves to undefined', async () => {
     await expect(runFixReviewAgent(input)).resolves.toBeUndefined()
-  })
-  it('runFixStaticAgent resolves to undefined', async () => {
-    await expect(runFixStaticAgent(input)).resolves.toBeUndefined()
   })
   it('runMergeAgent resolves to undefined', async () => {
     await expect(runMergeAgent(input)).resolves.toBeUndefined()

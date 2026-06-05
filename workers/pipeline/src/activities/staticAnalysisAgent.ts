@@ -6,3 +6,7 @@ export async function runStaticAnalysisAgent(
   // Dispatched to static-analysis-agent task queue — implemented in workers/static-analysis-worker
   return { bloquant: [], modéré: [], hasBlockingIssues: false };
 }
+
+export async function runFixStaticAgent(_input: ReviewAgentInput): Promise<void> {
+  // Dispatched to static-analysis-agent task queue — implemented in workers/static-analysis-worker
+}

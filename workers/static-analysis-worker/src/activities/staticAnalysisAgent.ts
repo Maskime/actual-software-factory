@@ -107,7 +107,7 @@ function parseHotspotList(text: string): SonarIssue[] {
   }
 }
 
-async function fetchSonarIssues(
+export async function fetchSonarIssues(
   mcpUrl: string,
   projectKey: string,
   branchName: string,
