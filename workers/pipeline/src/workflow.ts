@@ -1,6 +1,6 @@
 import {
   proxyActivities, defineSignal, setHandler, condition,
-  upsertSearchAttributes, log, ActivityFailure,
+  upsertSearchAttributes, log, ActivityFailure, workflowInfo,
 } from '@temporalio/workflow';
 import { defineSearchAttributeKey } from '@temporalio/common';
 import type * as gitlab from './activities/gitlab.js';
@@ -15,7 +15,7 @@ import {
   humanInTheLoopConfig, suspendNotificationConfig, sonarqubeCiTimeoutConfig,
 } from './config.js';
 
-const { applyWorkflowLabel, closeIssue, addIssueComment } = proxyActivities<typeof gitlab>(
+const { applyWorkflowLabel, closeIssue, addIssueComment, logStageMetric } = proxyActivities<typeof gitlab>(
   gitlabActivityOptions()
 );
 
@@ -267,10 +267,17 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
     }
   }
 
+  const mergeStartTime = Date.now();
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.merge }]);
   await applyLabel(L.merge, currentLabelRef.value);
   log.info('Starting merge agent', { issueIid: iid });
   await withSuspendOnFailure(ctx, 'merge', PIPELINE_STAGE.merge, () => runMergeAgent(input));
+  await logStageMetric({
+    workflowId: workflowInfo().workflowId,
+    stage: 'merge',
+    status: 'success',
+    durationMs: Date.now() - mergeStartTime,
+  });
 
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.done }]);
   await closeIssue(pid, iid);

@@ -7,6 +7,7 @@ const { mockCallMcpTool } = vi.hoisted(() => ({
 vi.mock('@factory/worker-shared', () => ({
   callMcpTool: mockCallMcpTool,
   auditLog: vi.fn(),
+  metricLog: vi.fn(),
   summarize: vi.fn((v: unknown) => String(v)),
 }));
 
