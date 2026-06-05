@@ -1,6 +1,6 @@
 import { activityInfo, log } from '@temporalio/activity';
 import Anthropic from '@anthropic-ai/sdk';
-import { callMcpTool, createAnthropicClient, auditLog, summarize, type AuditContext } from '@factory/worker-shared';
+import { callMcpTool, createAnthropicClient, auditLog, metricLog, summarize, type AuditContext } from '@factory/worker-shared';
 
 export interface FixCodeInput {
   issueIid: number;
@@ -201,13 +201,22 @@ export async function fixCode(input: FixCodeInput): Promise<FixCodeOutput> {
     activityName: 'fixCode',
   };
 
+  const startTime = Date.now();
+  let fixSucceeded = false;
+  let metricFixed = 0;
+  let metricSkipped = 0;
+
+  try {
   log.info('Fix-review agent starting', { mrIid: input.mrIid, projectId: input.projectId });
   const { mcpGitlabUrl, mcpTemporalUrl, anthropicModel } = fixConfig();
 
   const feedbacks = await fetchBlockingComments(mcpGitlabUrl, input.projectId, input.mrIid, auditCtx);
   log.info('Blocking comments fetched', { count: feedbacks.length, mrIid: input.mrIid });
 
-  if (feedbacks.length === 0) return { fixed: 0, skipped: 0 };
+  if (feedbacks.length === 0) {
+    fixSucceeded = true;
+    return { fixed: 0, skipped: 0 };
+  }
 
   const diff = await fetchMrDiff(mcpGitlabUrl, input.projectId, input.mrIid, auditCtx);
   const client = createAnthropicClient();
@@ -274,5 +283,20 @@ export async function fixCode(input: FixCodeInput): Promise<FixCodeOutput> {
     });
   }
 
+  fixSucceeded = true;
+  metricFixed = fixed;
+  metricSkipped = skipped;
   return { fixed, skipped };
+  } finally {
+    metricLog({
+      type: 'metric',
+      timestamp: new Date().toISOString(),
+      workflowId: auditCtx.workflowId,
+      stage: 'fix',
+      status: fixSucceeded ? 'success' : 'failure',
+      durationMs: Date.now() - startTime,
+      fixed: metricFixed,
+      skipped: metricSkipped,
+    });
+  }
 }

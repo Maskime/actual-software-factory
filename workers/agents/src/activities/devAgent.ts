@@ -5,7 +5,7 @@ import { rm } from 'node:fs/promises';
 import Anthropic from '@anthropic-ai/sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { auditLog, summarize, type AuditContext } from '@factory/worker-shared';
+import { auditLog, metricLog, summarize, type AuditContext } from '@factory/worker-shared';
 import { setupWorkspace } from './setupWorkspace.js';
 import { AGENT_TOOLS, executeTool } from '../tools.js';
 import type { DevAgentOutput, IssueContext, WorkspaceContext } from '../types.js';
@@ -612,6 +612,8 @@ export async function runDevAgent(input: DevAgentInput): Promise<DevAgentOutput>
     activityName: 'runDevAgent',
   };
   const workDir = `/tmp/factory/${workflowRunId}`;
+  const startTime = Date.now();
+  let devSucceeded = false;
 
   log.info('Dev agent starting', { issueIid: input.issueIid, workDir });
 
@@ -684,8 +686,17 @@ export async function runDevAgent(input: DevAgentInput): Promise<DevAgentOutput>
     );
 
     log.info('Dev agent completed successfully', { issueIid: input.issueIid });
+    devSucceeded = true;
     return { mrIid: mrData.iid, branchName, projectId: input.projectId };
   } finally {
+    metricLog({
+      type: 'metric',
+      timestamp: new Date().toISOString(),
+      workflowId: auditCtx.workflowId,
+      stage: 'dev',
+      status: devSucceeded ? 'success' : 'failure',
+      durationMs: Date.now() - startTime,
+    });
     if (ctx && existsSync(workDir)) {
       try {
         await rm(workDir, { recursive: true, force: true });

@@ -1,7 +1,7 @@
 import { ApplicationFailure, activityInfo, log } from '@temporalio/activity';
 import Anthropic from '@anthropic-ai/sdk';
 import {
-  callMcpTool as sharedCallMcpTool, auditLog, summarize,
+  callMcpTool as sharedCallMcpTool, auditLog, metricLog, summarize,
   type ReviewComment, type ReviewAgentOutput, type AuditContext,
 } from '@factory/worker-shared';
 
@@ -334,6 +334,9 @@ export async function reviewCode(input: ReviewCodeInput): Promise<ReviewAgentOut
     activityName: 'reviewCode',
   };
 
+  const startTime = Date.now();
+
+  try {
   log.info('Review agent starting', {
     mrIid: input.mrIid,
     projectId: input.projectId,
@@ -395,5 +398,28 @@ export async function reviewCode(input: ReviewCodeInput): Promise<ReviewAgentOut
 
   log.info('Review completed', { mrIid: input.mrIid, total: comments.length, bloquant });
 
+  metricLog({
+    type: 'metric',
+    timestamp: new Date().toISOString(),
+    workflowId: auditCtx.workflowId,
+    stage: 'review',
+    status: 'success',
+    durationMs: Date.now() - startTime,
+    bloquant,
+    modéré,
+    esthétique,
+    totalComments: comments.length,
+  });
   return { comments, bloquant, modéré, esthétique, backlogIssueIids };
+  } catch (err) {
+    metricLog({
+      type: 'metric',
+      timestamp: new Date().toISOString(),
+      workflowId: auditCtx.workflowId,
+      stage: 'review',
+      status: 'failure',
+      durationMs: Date.now() - startTime,
+    });
+    throw err;
+  }
 }

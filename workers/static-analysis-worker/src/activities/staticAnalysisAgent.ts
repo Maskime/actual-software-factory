@@ -1,5 +1,5 @@
 import { ApplicationFailure, activityInfo, log } from '@temporalio/activity';
-import { callMcpTool, type AuditContext } from '@factory/worker-shared';
+import { callMcpTool, metricLog, type AuditContext } from '@factory/worker-shared';
 
 export interface StaticAnalysisInput {
   issueIid: number;
@@ -133,6 +133,12 @@ export async function runStaticAnalysisAgent(input: StaticAnalysisInput): Promis
     activityName: 'runStaticAnalysisAgent',
   };
 
+  const startTime = Date.now();
+  let analysisSucceeded = false;
+  let metricBloquant = 0;
+  let metricModere = 0;
+
+  try {
   const { projectKey, mcpSonarqubeUrl } = staticAnalysisConfig();
   log.info('Static analysis agent starting', { mrIid: input.mrIid, branchName: input.branchName });
 
@@ -153,5 +159,20 @@ export async function runStaticAnalysisAgent(input: StaticAnalysisInput): Promis
     })),
   });
 
+  analysisSucceeded = true;
+  metricBloquant = bloquant.length;
+  metricModere = modéré.length;
   return { bloquant, modéré, hasBlockingIssues: bloquant.length > 0 };
+  } finally {
+    metricLog({
+      type: 'metric',
+      timestamp: new Date().toISOString(),
+      workflowId: auditCtx.workflowId,
+      stage: 'sonarqube',
+      status: analysisSucceeded ? 'success' : 'failure',
+      durationMs: Date.now() - startTime,
+      bloquant: metricBloquant,
+      modéré: metricModere,
+    });
+  }
 }

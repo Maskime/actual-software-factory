@@ -11,6 +11,7 @@ vi.mock('@factory/worker-shared', () => ({
     messages: { create: mockAnthropicCreate },
   }),
   auditLog: vi.fn(),
+  metricLog: vi.fn(),
   summarize: vi.fn((v: unknown) => String(v)),
 }));
 

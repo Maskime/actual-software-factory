@@ -1,6 +1,6 @@
 import { vi, describe, it, expect, beforeEach, afterEach } from 'vitest'
 import { ApplicationFailure } from '@temporalio/activity'
-import { applyWorkflowLabel, closeIssue, addIssueComment } from './gitlab.js'
+import { applyWorkflowLabel, closeIssue, addIssueComment, logStageMetric } from './gitlab.js'
 
 const TOKEN = 'test-token'
 const BASE_URL = 'http://test-gitlab/api/v4'
@@ -163,5 +163,33 @@ describe('addIssueComment', () => {
         err.nonRetryable === true &&
         err.type === 'MissingConfigError'
     )
+  })
+})
+
+const { mockMetricLog } = vi.hoisted(() => ({ mockMetricLog: vi.fn() }))
+
+vi.mock('@factory/worker-shared', () => ({
+  metricLog: mockMetricLog,
+}))
+
+describe('logStageMetric', () => {
+  beforeEach(() => { vi.clearAllMocks() })
+
+  it('calls metricLog with type metric and the provided fields', async () => {
+    await logStageMetric({ workflowId: 'wf-1', stage: 'merge', status: 'success', durationMs: 1234 })
+    expect(mockMetricLog).toHaveBeenCalledOnce()
+    expect(mockMetricLog).toHaveBeenCalledWith(expect.objectContaining({
+      type: 'metric',
+      workflowId: 'wf-1',
+      stage: 'merge',
+      status: 'success',
+      durationMs: 1234,
+    }))
+  })
+
+  it('includes a non-empty ISO timestamp', async () => {
+    await logStageMetric({ workflowId: 'wf-2', stage: 'dev', status: 'failure', durationMs: 0 })
+    const call = mockMetricLog.mock.calls[0][0] as { timestamp: string }
+    expect(call.timestamp).toMatch(/^\d{4}-\d{2}-\d{2}T/)
   })
 })

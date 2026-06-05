@@ -28,12 +28,33 @@ export interface AuditEntry {
   outputSummary: string;
 }
 
+export type PipelineStage = 'dev' | 'review' | 'fix' | 'sonarqube' | 'merge';
+
+export interface MetricEntry {
+  type: 'metric';
+  timestamp: string;
+  workflowId: string;
+  stage: PipelineStage;
+  status: 'success' | 'failure';
+  durationMs: number;
+  bloquant?: number;
+  modéré?: number;
+  esthétique?: number;
+  totalComments?: number;
+  fixed?: number;
+  skipped?: number;
+}
+
 export function summarize(value: unknown, maxLength = 300): string {
   const s = typeof value === 'string' ? value : JSON.stringify(value);
   return s.length > maxLength ? `${s.slice(0, maxLength)}…` : s;
 }
 
 export function auditLog(entry: AuditEntry): void {
+  console.log(JSON.stringify(entry));
+}
+
+export function metricLog(entry: MetricEntry): void {
   console.log(JSON.stringify(entry));
 }
 

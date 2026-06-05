@@ -1,4 +1,5 @@
 import { ApplicationFailure } from '@temporalio/activity';
+import { metricLog, type MetricEntry } from '@factory/worker-shared';
 
 const ALL_WORKFLOW_LABELS = 'workflow::dev,workflow::review,workflow::fix,workflow::sonarqube,workflow::awaiting-ci,workflow::awaiting-approval,workflow::merge,workflow::suspended';
 
@@ -61,4 +62,15 @@ export async function addIssueComment(
   const { baseUrl, token } = gitlabConfig();
   const url = `${baseUrl}/projects/${projectId}/issues/${issueIid}/notes`;
   await gitlabRequest('POST', url, token, { body });
+}
+
+export interface StageMetricInput {
+  workflowId: string;
+  stage: MetricEntry['stage'];
+  status: 'success' | 'failure';
+  durationMs: number;
+}
+
+export async function logStageMetric(input: StageMetricInput): Promise<void> {
+  metricLog({ type: 'metric', timestamp: new Date().toISOString(), ...input });
 }
