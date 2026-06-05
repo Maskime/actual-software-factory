@@ -7,7 +7,7 @@ import type * as gitlab from './activities/gitlab.js';
 import type * as agents from './activities/agents.js';
 import type * as reviewActivities from './activities/reviewAgent.js';
 import type * as staticAnalysisActivities from './activities/staticAnalysisAgent.js';
-import type { PipelineInput, SonarqubeScanResult } from './types.js';
+import type { PipelineInput, SonarqubeScanResult, ReviewFixResult } from './types.js';
 import { WORKFLOW_LABELS, PIPELINE_STAGE } from './types.js';
 import {
   gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions,
@@ -30,6 +30,7 @@ const { runStaticAnalysisAgent } = proxyActivities<typeof staticAnalysisActiviti
 const approveMergeSignal             = defineSignal('approve-merge');
 const resumeSignal                    = defineSignal('resume');
 const sonarqubeScanCompletedSignal    = defineSignal<[SonarqubeScanResult]>('sonarqube-scan-completed');
+const reviewFixCompletedSignal        = defineSignal<[ReviewFixResult]>('review-fix-completed');
 
 const issueIidKey = defineSearchAttributeKey('GitLabIssueIid', 'INT');
 const stageKey    = defineSearchAttributeKey('PipelineStage', 'KEYWORD');
@@ -127,9 +128,11 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   const currentLabelRef   = { value: '' };
   const scanResultVersion = { value: 0 };
   let sonarqubeScanResult: SonarqubeScanResult | undefined;
+  let reviewFixResult: ReviewFixResult | undefined;
 
   setHandler(resumeSignal, () => { resumeCountRef.value++; });
   setHandler(sonarqubeScanCompletedSignal, (r) => { sonarqubeScanResult = r; scanResultVersion.value++; });
+  setHandler(reviewFixCompletedSignal, (r) => { reviewFixResult = r; });
 
   const ctx: SuspendCtx = { pid, iid, L, notifyEnabled: notify.enabled, resumeCountRef, currentLabelRef };
 
@@ -164,6 +167,25 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
     await applyLabel(L.fix, L.review);
     log.info('Starting fix-review agent', { issueIid: iid, bloquant: reviewOutput.bloquant });
     await withSuspendOnFailure(ctx, 'fix', PIPELINE_STAGE.fix, () => runFixReviewAgent(input));
+
+    if (reviewFixResult?.status === 'partial') {
+      log.warn('Partial fix — suspending for human intervention', {
+        issueIid: iid, commitCount: reviewFixResult.commitCount,
+      });
+      const suspendedFrom  = currentLabelRef.value;
+      const expectedResume = resumeCountRef.value + 1;
+      upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.suspended }]);
+      await notifySuspension(
+        pid, iid, 'fix-partial',
+        `Correction partielle : ${reviewFixResult.commitCount} commit(s) appliqué(s), certains blocages n'ont pas pu être corrigés automatiquement.`,
+        suspendedFrom, notify.enabled, L,
+      );
+      ctx.currentLabelRef.value = L.suspended;
+      await condition(() => ctx.resumeCountRef.value >= expectedResume);
+      await restoreAfterResume(pid, iid, PIPELINE_STAGE.fix, suspendedFrom, L);
+      ctx.currentLabelRef.value = suspendedFrom;
+    }
+
     upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.sonarqube }]);
     await applyLabel(L.sonarqube, L.fix);
   } else {

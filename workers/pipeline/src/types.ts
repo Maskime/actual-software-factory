@@ -64,3 +64,8 @@ export interface StaticAnalysisResult {
   modéré: SonarIssue[];
   hasBlockingIssues: boolean;
 }
+
+export interface ReviewFixResult {
+  status: 'success' | 'partial';
+  commitCount: number;
+}
