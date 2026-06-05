@@ -39,7 +39,7 @@ export function buildMcpServer(tc: TemporalClient): McpServer {
 
   server.tool(
     "temporal_trigger_pipeline",
-    "Start a factory pipeline workflow for a GitLab issue. Derives the workflowId from the issue IID (pipeline-issue-{iid}) to guarantee uniqueness. Idempotent: a second call for the same issue returns started: false with status already_running instead of creating a duplicate.",
+    "Start a factory pipeline workflow for a GitLab issue. Before starting, checks the issue labels and state on GitLab: returns already_in_pipeline if a workflow::* label is present, issue_closed if the issue is closed, or GITLAB_UNREACHABLE if the GitLab API is unavailable. Idempotent: a second call for the same running workflow returns already_running.",
     triggerPipelineSchema.shape,
     (params) => handleTriggerPipeline(tc, params)
   );
