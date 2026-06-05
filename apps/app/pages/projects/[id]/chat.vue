@@ -23,6 +23,8 @@ const { signOut } = useAuth()
 const { data: projects } = await useFetch<GitLabProject[]>('/api/projects')
 const project = computed(() => projects.value?.find(p => p.id === projectId) ?? null)
 
+useHead(computed(() => ({ title: project.value?.name ? `${project.value.name} — Chat` : 'Chat' })))
+
 const messages = ref<Message[]>([])
 const isStreaming = ref(false)
 const error = ref<string | null>(null)

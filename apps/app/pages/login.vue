@@ -1,4 +1,6 @@
 <script setup lang="ts">
+useHead({ title: 'Connexion' })
+
 const { signIn, status } = useAuth()
 
 if (status.value === 'authenticated') {

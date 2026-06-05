@@ -18,6 +18,8 @@ const { signOut } = useAuth()
 const { data: projects } = await useFetch<GitLabProject[]>('/api/projects')
 const project = computed(() => projects.value?.find(p => p.id === projectId) ?? null)
 
+useHead(computed(() => ({ title: project.value?.name ?? 'Projet' })))
+
 const { data: issues, status, error } = await useFetch<GitLabIssue[]>(
   `/api/projects/${projectId}/issues`,
   { key: `issues-${projectId}` },

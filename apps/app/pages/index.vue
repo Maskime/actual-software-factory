@@ -2,6 +2,7 @@
 import type { GitLabProject } from '../../server/api/projects.get'
 
 definePageMeta({ middleware: 'home-redirect' })
+useHead({ titleTemplate: '%s', title: 'Software Factory' })
 
 const { signOut } = useAuth()
 const { data: projects, status, error } = await useFetch<GitLabProject[]>('/api/projects')

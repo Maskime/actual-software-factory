@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import type { GitLabProject } from '../../../server/api/projects.get'
 
+useHead({ title: 'Projets' })
+
 const { signOut } = useAuth()
 const { data: projects, status, error } = await useFetch<GitLabProject[]>('/api/projects')
 </script>

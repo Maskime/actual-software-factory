@@ -2,6 +2,12 @@ export default defineNuxtConfig({
   future: {
     compatibilityVersion: 4,
   },
+  app: {
+    head: {
+      titleTemplate: '%s — Software Factory',
+      title: 'Software Factory',
+    },
+  },
   modules: ['@nuxtjs/tailwindcss', '@sidebase/nuxt-auth'],
   devtools: { enabled: false },
   auth: {
