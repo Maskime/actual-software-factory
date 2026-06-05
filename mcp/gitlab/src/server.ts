@@ -34,6 +34,10 @@ import {
   handleAddMrInlineComment,
   mergeMrSchema,
   handleMergeMr,
+  listMrsSchema,
+  handleListMrs,
+  closeMrSchema,
+  handleCloseMr,
 } from "./tools/merge_requests.js";
 import {
   createBranchSchema,
@@ -195,6 +199,20 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     "Merge a GitLab Merge Request. Fails with a structured error if unresolved discussions or failed pipelines block the merge. Supports merge_when_pipeline_succeeds for async merging.",
     mergeMrSchema.shape,
     (params) => handleMergeMr(client, params)
+  );
+
+  server.tool(
+    "gitlab_list_mrs",
+    "List merge requests in a GitLab project. Supports filtering by state, source/target branch, and labels. Returns up to 100 merge requests per page.",
+    listMrsSchema.shape,
+    (params) => handleListMrs(client, params)
+  );
+
+  server.tool(
+    "gitlab_close_mr",
+    "Close a GitLab Merge Request without merging it.",
+    closeMrSchema.shape,
+    (params) => handleCloseMr(client, params)
   );
 
   server.tool(
