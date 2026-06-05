@@ -12,6 +12,7 @@ export default defineConfig({
   test: {
     name: 'chat',
     environment: 'jsdom',
+    setupFiles: ['./vitest.setup.ts'],
     include: ['app/**/*.test.ts', 'server/**/*.test.ts'],
     coverage: {
       provider: 'v8',
