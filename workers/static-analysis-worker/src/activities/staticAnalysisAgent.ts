@@ -125,7 +125,7 @@ function buildBacklogIssueTitle(issue: SonarIssue): string {
 function buildBacklogIssueDescription(issue: SonarIssue): string {
   const rule = issue.rule ?? issue.type;
   const filePath = extractFilePath(issue.component);
-  const lineRef = issue.line !== undefined ? String(issue.line) : 'N/A';
+  const lineRef = issue.line === undefined ? 'N/A' : String(issue.line);
   return [
     `**Règle** : ${rule}`,
     `**Fichier** : ${filePath}`,
