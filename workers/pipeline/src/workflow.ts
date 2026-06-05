@@ -19,13 +19,13 @@ const { applyWorkflowLabel, closeIssue, addIssueComment } = proxyActivities<type
   gitlabActivityOptions()
 );
 
-const { runDevAgent, runFixReviewAgent,
-        runFixStaticAgent, runMergeAgent } =
+const { runDevAgent, runFixReviewAgent, runMergeAgent } =
   proxyActivities<typeof agents>(agentActivityOptions());
 
 const { reviewCode } = proxyActivities<typeof reviewActivities>(reviewAgentActivityOptions());
 
-const { runStaticAnalysisAgent } = proxyActivities<typeof staticAnalysisActivities>(staticAnalysisActivityOptions());
+const { runStaticAnalysisAgent, runFixStaticAgent } =
+  proxyActivities<typeof staticAnalysisActivities>(staticAnalysisActivityOptions());
 
 const approveMergeSignal             = defineSignal('approve-merge');
 const resumeSignal                    = defineSignal('resume');
@@ -240,7 +240,9 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   await applyLabel(L.sonarqube, L.awaiting_ci);
 
   if (staticResult.hasBlockingIssues) {
-    await withSuspendOnFailure(ctx, 'sonarqube', PIPELINE_STAGE.sonarqube, () => runFixStaticAgent(input));
+    await withSuspendOnFailure(ctx, 'sonarqube', PIPELINE_STAGE.sonarqube, () =>
+      runFixStaticAgent({ ...input, mrIid: devOutput.mrIid, branchName: devOutput.branchName })
+    );
   } else {
     log.info('No blocking SonarQube issues — skipping fix-static agent', { issueIid: iid });
   }
