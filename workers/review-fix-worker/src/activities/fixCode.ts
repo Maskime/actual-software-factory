@@ -50,10 +50,11 @@ interface GitLabFileResponse {
   content: string;
 }
 
-function fixConfig(): { mcpGitlabUrl: string; anthropicModel: string } {
+function fixConfig(): { mcpGitlabUrl: string; mcpTemporalUrl: string; anthropicModel: string } {
   return {
-    mcpGitlabUrl:   process.env.MCP_GITLAB_URL  ?? 'http://mcp-gitlab:3000/mcp', // NOSONAR
-    anthropicModel: process.env.ANTHROPIC_MODEL ?? 'claude-sonnet-4-6',
+    mcpGitlabUrl:   process.env.MCP_GITLAB_URL   ?? 'http://mcp-gitlab:3000/mcp',   // NOSONAR
+    mcpTemporalUrl: process.env.MCP_TEMPORAL_URL  ?? 'http://mcp-temporal:3000/mcp', // NOSONAR
+    anthropicModel: process.env.ANTHROPIC_MODEL  ?? 'claude-sonnet-4-6',
   };
 }
 
@@ -201,7 +202,7 @@ export async function fixCode(input: FixCodeInput): Promise<FixCodeOutput> {
   };
 
   log.info('Fix-review agent starting', { mrIid: input.mrIid, projectId: input.projectId });
-  const { mcpGitlabUrl, anthropicModel } = fixConfig();
+  const { mcpGitlabUrl, mcpTemporalUrl, anthropicModel } = fixConfig();
 
   const feedbacks = await fetchBlockingComments(mcpGitlabUrl, input.projectId, input.mrIid, auditCtx);
   log.info('Blocking comments fetched', { count: feedbacks.length, mrIid: input.mrIid });
@@ -256,5 +257,22 @@ export async function fixCode(input: FixCodeInput): Promise<FixCodeOutput> {
   }
 
   log.info('Fix-review agent done', { fixed, skipped, mrIid: input.mrIid });
+
+  const workflowId    = info.workflowExecution?.workflowId ?? '';
+  const signalStatus: 'success' | 'partial' = skipped > 0 ? 'partial' : 'success';
+  try {
+    await callMcpTool(WORKER_NAME, mcpTemporalUrl, 'temporal_send_signal', {
+      workflow_id:  workflowId,
+      signal_name:  'review-fix-completed',
+      payload: { status: signalStatus, commitCount: fixed },
+    }, auditCtx);
+    log.info('review-fix-completed signal sent', { workflowId, status: signalStatus, commitCount: fixed });
+  } catch (signalErr) {
+    log.warn('Failed to send review-fix-completed signal', {
+      workflowId,
+      error: signalErr instanceof Error ? signalErr.message : String(signalErr),
+    });
+  }
+
   return { fixed, skipped };
 }

@@ -48,6 +48,9 @@ function fileText(content: string): string {
 function commitText(): string {
   return JSON.stringify({ id: 'abc123' });
 }
+function signalText(): string {
+  return JSON.stringify({ success: true, workflow_id: 'test-workflow-id', signal_name: 'review-fix-completed' });
+}
 
 function applyFixResponse(fixedContent: string): { content: unknown[] } {
   return {
@@ -87,7 +90,8 @@ describe('fixCode', () => {
       .mockResolvedValueOnce(mrText([
         { id: 1, body: '[BLOQUANT] General architecture issue', position: null },
       ]))
-      .mockResolvedValueOnce(diffText());
+      .mockResolvedValueOnce(diffText())
+      .mockResolvedValueOnce(signalText());
     expect(await fixCode(INPUT)).toEqual({ fixed: 0, skipped: 1 });
   });
 
@@ -102,7 +106,8 @@ describe('fixCode', () => {
         { old_path: 'src/foo.ts', new_path: 'src/foo.ts', diff: '@@ -1,3 +1,3 @@\n-old\n+new' },
       ]))
       .mockResolvedValueOnce(fileText('const x = obj.value;'))
-      .mockResolvedValueOnce(commitText());
+      .mockResolvedValueOnce(commitText())
+      .mockResolvedValueOnce(signalText());
     mockAnthropicCreate.mockResolvedValueOnce(applyFixResponse('const x = obj?.value;'));
 
     expect(await fixCode(INPUT)).toEqual({ fixed: 1, skipped: 0 });
@@ -116,7 +121,8 @@ describe('fixCode', () => {
       ]))
       .mockResolvedValueOnce(diffText([]))
       .mockResolvedValueOnce(fileText('db.query(`SELECT * FROM users WHERE id = ${id}`);'))
-      .mockResolvedValueOnce(commitText());
+      .mockResolvedValueOnce(commitText())
+      .mockResolvedValueOnce(signalText());
     mockAnthropicCreate.mockResolvedValueOnce(applyFixResponse('db.query("SELECT * FROM users WHERE id = ?", [id]);'));
 
     expect(await fixCode(INPUT)).toEqual({ fixed: 1, skipped: 1 });
@@ -128,7 +134,8 @@ describe('fixCode', () => {
         { id: 1, body: '[BLOQUANT] Null dereference', position: { new_path: 'src/foo.ts', new_line: 5 } },
       ]))
       .mockResolvedValueOnce(diffText([]))
-      .mockResolvedValueOnce(fileText('const x = obj.value;'));
+      .mockResolvedValueOnce(fileText('const x = obj.value;'))
+      .mockResolvedValueOnce(signalText());
     mockAnthropicCreate.mockResolvedValueOnce({ content: [{ type: 'text', text: 'I cannot fix this.' }] });
 
     expect(await fixCode(INPUT)).toEqual({ fixed: 0, skipped: 1 });
@@ -142,12 +149,13 @@ describe('fixCode', () => {
       ]))
       .mockResolvedValueOnce(diffText([]))
       .mockResolvedValueOnce(fileText('original'))
-      .mockResolvedValueOnce(commitText());
+      .mockResolvedValueOnce(commitText())
+      .mockResolvedValueOnce(signalText());
     mockAnthropicCreate.mockResolvedValueOnce(applyFixResponse('fixed'));
 
     await fixCode(INPUT);
 
-    // calls: [0] gitlab_get_mr, [1] gitlab_get_mr_diff, [2] gitlab_get_file, [3] gitlab_commit_files
+    // calls: [0] gitlab_get_mr, [1] gitlab_get_mr_diff, [2] gitlab_get_file, [3] gitlab_commit_files, [4] temporal_send_signal
     const [, , , commitArgs] = mockCallMcpTool.mock.calls[3] as [string, string, string, { commit_message: string }];
     expect(commitArgs.commit_message).toBe(`fix: [BLOQUANT] ${feedback}`);
   });
@@ -160,7 +168,8 @@ describe('fixCode', () => {
       ]))
       .mockResolvedValueOnce(diffText([]))
       .mockResolvedValueOnce(fileText('original'))
-      .mockResolvedValueOnce(commitText());
+      .mockResolvedValueOnce(commitText())
+      .mockResolvedValueOnce(signalText());
     mockAnthropicCreate.mockResolvedValueOnce(applyFixResponse('fixed'));
 
     await fixCode(INPUT);
@@ -180,7 +189,8 @@ describe('fixCode', () => {
         { old_path: 'src/foo.ts', new_path: 'src/foo.ts', diff: fileDiff },
       ]))
       .mockResolvedValueOnce(fileText(fileContent))
-      .mockResolvedValueOnce(commitText());
+      .mockResolvedValueOnce(commitText())
+      .mockResolvedValueOnce(signalText());
     mockAnthropicCreate.mockResolvedValueOnce(applyFixResponse('fixed'));
 
     await fixCode(INPUT);
@@ -224,7 +234,8 @@ describe('fixCode', () => {
       ]))
       .mockResolvedValueOnce(diffText([]))
       .mockResolvedValueOnce(fileText('original'))
-      .mockResolvedValueOnce(commitText());
+      .mockResolvedValueOnce(commitText())
+      .mockResolvedValueOnce(signalText());
     mockAnthropicCreate.mockResolvedValueOnce(applyFixResponse('fixed'));
 
     await fixCode(INPUT);
@@ -233,5 +244,60 @@ describe('fixCode', () => {
     const userMessage = claudeArg.messages[0].content;
     expect(userMessage).toContain('src/foo.ts');
     expect(userMessage).toContain('line 42');
+  });
+
+  // ── Signal Temporal ──────────────────────────────────────────────────────────
+
+  it('sends success signal when all blocking comments are fixed', async () => {
+    mockCallMcpTool
+      .mockResolvedValueOnce(mrText([
+        { id: 1, body: '[BLOQUANT] Null check', position: { new_path: 'src/foo.ts', new_line: 1 } },
+      ]))
+      .mockResolvedValueOnce(diffText([]))
+      .mockResolvedValueOnce(fileText('original'))
+      .mockResolvedValueOnce(commitText())
+      .mockResolvedValueOnce(signalText());
+    mockAnthropicCreate.mockResolvedValueOnce(applyFixResponse('fixed'));
+
+    await fixCode(INPUT);
+
+    const signalCall = mockCallMcpTool.mock.calls.find(
+      (call) => (call as unknown[])[2] === 'temporal_send_signal',
+    ) as [string, string, string, { workflow_id: string; signal_name: string; payload: { status: string; commitCount: number } }];
+    expect(signalCall).toBeDefined();
+    expect(signalCall[3].signal_name).toBe('review-fix-completed');
+    expect(signalCall[3].payload).toEqual({ status: 'success', commitCount: 1 });
+  });
+
+  it('sends partial signal when some blocking comments could not be fixed', async () => {
+    mockCallMcpTool
+      .mockResolvedValueOnce(mrText([
+        { id: 1, body: '[BLOQUANT] SQL injection', position: { new_path: 'src/db.ts', new_line: 10 } },
+        { id: 2, body: '[BLOQUANT] General issue',  position: null },
+      ]))
+      .mockResolvedValueOnce(diffText([]))
+      .mockResolvedValueOnce(fileText('original'))
+      .mockResolvedValueOnce(commitText())
+      .mockResolvedValueOnce(signalText());
+    mockAnthropicCreate.mockResolvedValueOnce(applyFixResponse('fixed'));
+
+    await fixCode(INPUT);
+
+    const signalCall = mockCallMcpTool.mock.calls.find(
+      (call) => (call as unknown[])[2] === 'temporal_send_signal',
+    ) as [string, string, string, { payload: { status: string; commitCount: number } }];
+    expect(signalCall).toBeDefined();
+    expect(signalCall[3].payload).toEqual({ status: 'partial', commitCount: 1 });
+  });
+
+  it('does not send signal when there are no blocking comments', async () => {
+    mockCallMcpTool.mockResolvedValueOnce(mrText([]));
+
+    await fixCode(INPUT);
+
+    const signalCall = mockCallMcpTool.mock.calls.find(
+      (call) => (call as unknown[])[2] === 'temporal_send_signal',
+    );
+    expect(signalCall).toBeUndefined();
   });
 });
