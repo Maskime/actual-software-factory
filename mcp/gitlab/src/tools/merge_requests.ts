@@ -8,6 +8,8 @@ interface GitLabMR {
   title: string;
   description: string | null;
   state: "opened" | "closed" | "merged" | "locked";
+  source_branch: string;
+  target_branch: string;
   labels: string[];
   changes_count: string | null;
   merge_status: string;
@@ -393,6 +395,113 @@ export async function handleMergeMr(
             text: JSON.stringify({
               error: {
                 code: "GITLAB_MERGE_BLOCKED",
+                statusCode: err.statusCode,
+                message: err.message,
+              },
+            }),
+          },
+        ],
+        isError: true as const,
+      };
+    }
+    return errorResponse(err);
+  }
+}
+
+// gitlab_list_mrs
+
+export const listMrsSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  state: z
+    .enum(["opened", "closed", "merged", "all"])
+    .optional()
+    .describe("Filter by MR state (default: opened)"),
+  source_branch: z.string().optional().describe("Filter by source branch name"),
+  target_branch: z.string().optional().describe("Filter by target branch name"),
+  labels: z
+    .string()
+    .optional()
+    .describe("Comma-separated list of label names to filter by"),
+  page: z
+    .number()
+    .int()
+    .positive()
+    .optional()
+    .describe("Page number for pagination (default: 1)"),
+});
+
+export async function handleListMrs(
+  client: GitLabClient,
+  params: z.infer<typeof listMrsSchema>
+): Promise<ToolResult> {
+  try {
+    const queryParams: Record<string, unknown> = { per_page: 100 };
+    if (params.state !== undefined) queryParams.state = params.state;
+    if (params.source_branch !== undefined) queryParams.source_branch = params.source_branch;
+    if (params.target_branch !== undefined) queryParams.target_branch = params.target_branch;
+    if (params.labels !== undefined) queryParams.labels = params.labels;
+    if (params.page !== undefined) queryParams.page = params.page;
+
+    const mrs = await client.get<GitLabMR[]>(
+      `${projectPath(params.project_id)}/merge_requests`,
+      queryParams
+    );
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify(
+            mrs.map((mr) => ({
+              iid: mr.iid,
+              title: mr.title,
+              state: mr.state,
+              source_branch: mr.source_branch,
+              target_branch: mr.target_branch,
+              labels: mr.labels,
+              web_url: mr.web_url,
+            }))
+          ),
+        },
+      ],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
+// gitlab_close_mr
+
+export const closeMrSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  mr_iid: z.number().int().positive().describe("MR IID (project-scoped integer ID)"),
+});
+
+export async function handleCloseMr(
+  client: GitLabClient,
+  params: z.infer<typeof closeMrSchema>
+): Promise<ToolResult> {
+  try {
+    const mr = await client.put<GitLabMR>(
+      `${projectPath(params.project_id)}/merge_requests/${params.mr_iid}`,
+      { state_event: "close" }
+    );
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({ iid: mr.iid, state: mr.state, web_url: mr.web_url }),
+        },
+      ],
+    };
+  } catch (err) {
+    if (err instanceof GitLabApiError && err.statusCode === 405) {
+      return {
+        content: [
+          {
+            type: "text" as const,
+            text: JSON.stringify({
+              error: {
+                code: "GITLAB_MR_NOT_OPEN",
                 statusCode: err.statusCode,
                 message: err.message,
               },

@@ -9,6 +9,8 @@ import {
   handleAddMrComment,
   handleAddMrInlineComment,
   handleMergeMr,
+  handleListMrs,
+  handleCloseMr,
 } from './merge_requests.js'
 
 function makeMockClient(): { get: ReturnType<typeof vi.fn>; post: ReturnType<typeof vi.fn>; put: ReturnType<typeof vi.fn> } {
@@ -307,5 +309,96 @@ describe('handleAddMrComment()', () => {
     const client = { post: vi.fn().mockRejectedValue(new GitLabApiError('fail', 500, 'GITLAB_API_ERROR')) } as unknown as GitLabClient
     const result = await handleAddMrComment(client, { project_id: '3', mr_iid: 1, body: 'text' })
     expect(result.isError).toBe(true)
+  })
+})
+
+describe('handleListMrs()', () => {
+  let mockClient: ReturnType<typeof makeMockClient>
+  const fakeMrs = [
+    { iid: 1, title: 'Fix bug', state: 'opened', source_branch: 'fix/bug', target_branch: 'main', labels: ['bug'], web_url: 'http://gl/mr/1' },
+    { iid: 2, title: 'Add feat', state: 'opened', source_branch: 'feat/new', target_branch: 'main', labels: [], web_url: 'http://gl/mr/2' },
+  ]
+
+  beforeEach(() => {
+    mockClient = makeMockClient()
+    mockClient.get.mockResolvedValue(fakeMrs)
+  })
+
+  it('calls GET /merge_requests with per_page: 100 and returns mapped array', async () => {
+    const result = await handleListMrs(mockClient as unknown as GitLabClient, { project_id: '3' })
+    expect(result.isError).toBeUndefined()
+    const [path, params] = mockClient.get.mock.calls[0] as [string, Record<string, unknown>]
+    expect(path).toBe('/projects/3/merge_requests')
+    expect(params.per_page).toBe(100)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed).toHaveLength(2)
+    expect(parsed[0]).toEqual({ iid: 1, title: 'Fix bug', state: 'opened', source_branch: 'fix/bug', target_branch: 'main', labels: ['bug'], web_url: 'http://gl/mr/1' })
+  })
+
+  it('passes state filter when provided', async () => {
+    await handleListMrs(mockClient as unknown as GitLabClient, { project_id: '3', state: 'closed' })
+    const params = mockClient.get.mock.calls[0][1] as Record<string, unknown>
+    expect(params.state).toBe('closed')
+  })
+
+  it('passes source_branch and target_branch filters when provided', async () => {
+    await handleListMrs(mockClient as unknown as GitLabClient, { project_id: '3', source_branch: 'feat/x', target_branch: 'main' })
+    const params = mockClient.get.mock.calls[0][1] as Record<string, unknown>
+    expect(params.source_branch).toBe('feat/x')
+    expect(params.target_branch).toBe('main')
+  })
+
+  it('does not include optional params in query when not provided', async () => {
+    await handleListMrs(mockClient as unknown as GitLabClient, { project_id: '3' })
+    const params = mockClient.get.mock.calls[0][1] as Record<string, unknown>
+    expect(params.state).toBeUndefined()
+    expect(params.source_branch).toBeUndefined()
+    expect(params.target_branch).toBeUndefined()
+    expect(params.labels).toBeUndefined()
+    expect(params.page).toBeUndefined()
+  })
+
+  it('returns errorResponse on API error', async () => {
+    mockClient.get.mockRejectedValue(new GitLabApiError('fail', 500, 'GITLAB_API_ERROR'))
+    const result = await handleListMrs(mockClient as unknown as GitLabClient, { project_id: '3' })
+    expect(result.isError).toBe(true)
+  })
+})
+
+describe('handleCloseMr()', () => {
+  let mockClient: ReturnType<typeof makeMockClient>
+  const baseParams = { project_id: '3', mr_iid: 5 }
+
+  beforeEach(() => {
+    mockClient = makeMockClient()
+  })
+
+  it('calls PUT with state_event: close and returns iid, state, web_url', async () => {
+    mockClient.put.mockResolvedValue({ iid: 5, state: 'closed', web_url: 'http://gl/mr/5' })
+    const result = await handleCloseMr(mockClient as unknown as GitLabClient, baseParams)
+    expect(result.isError).toBeUndefined()
+    const [path, body] = mockClient.put.mock.calls[0] as [string, Record<string, unknown>]
+    expect(path).toBe('/projects/3/merge_requests/5')
+    expect(body.state_event).toBe('close')
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed).toEqual({ iid: 5, state: 'closed', web_url: 'http://gl/mr/5' })
+  })
+
+  it('returns GITLAB_MR_NOT_OPEN on GitLabApiError 405', async () => {
+    mockClient.put.mockRejectedValue(new GitLabApiError('already closed', 405, 'GITLAB_METHOD_NOT_ALLOWED'))
+    const result = await handleCloseMr(mockClient as unknown as GitLabClient, baseParams)
+    expect(result.isError).toBe(true)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.error.code).toBe('GITLAB_MR_NOT_OPEN')
+    expect(parsed.error.statusCode).toBe(405)
+  })
+
+  it('returns generic errorResponse on other API errors', async () => {
+    mockClient.put.mockRejectedValue(new GitLabApiError('server error', 500, 'GITLAB_API_ERROR'))
+    const result = await handleCloseMr(mockClient as unknown as GitLabClient, baseParams)
+    expect(result.isError).toBe(true)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.error.code).toBe('GITLAB_API_ERROR')
+    expect(parsed.error.statusCode).toBe(500)
   })
 })
