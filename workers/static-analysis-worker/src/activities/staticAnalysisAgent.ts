@@ -16,6 +16,7 @@ export interface SonarIssue {
   component: string;
   line?: number;
   vulnerabilityProbability?: string;
+  rule?: string;
 }
 
 export interface StaticAnalysisResult {
@@ -24,7 +25,7 @@ export interface StaticAnalysisResult {
   hasBlockingIssues: boolean;
 }
 
-function staticAnalysisConfig(): { projectKey: string; mcpSonarqubeUrl: string } {
+function staticAnalysisConfig(): { projectKey: string; mcpSonarqubeUrl: string; mcpGitlabUrl: string } {
   const projectKey = process.env.SONARQUBE_PROJECT_KEY;
   if (!projectKey) {
     throw ApplicationFailure.nonRetryable('SONARQUBE_PROJECT_KEY is not set', 'MissingConfigError');
@@ -32,6 +33,7 @@ function staticAnalysisConfig(): { projectKey: string; mcpSonarqubeUrl: string }
   return {
     projectKey,
     mcpSonarqubeUrl: process.env.MCP_SONARQUBE_INTERNAL_URL ?? 'http://mcp-sonarqube:3000/mcp', // NOSONAR
+    mcpGitlabUrl:    process.env.MCP_GITLAB_INTERNAL_URL    ?? 'http://mcp-gitlab:3000/mcp',    // NOSONAR
   };
 }
 
@@ -51,6 +53,7 @@ interface RawSonarIssue {
   message?: string;
   component?: string;
   line?: number;
+  rule?: string;
 }
 
 interface RawHotspot {
@@ -81,6 +84,7 @@ function parseIssueList(text: string): SonarIssue[] {
       message:   i.message  ?? '',
       component: i.component ?? '',
       line:      i.line,
+      rule:      i.rule,
     }));
   } catch {
     log.warn('Failed to parse SonarQube issues response', { text: text.slice(0, 200) });
@@ -105,6 +109,92 @@ function parseHotspotList(text: string): SonarIssue[] {
     log.warn('Failed to parse SonarQube hotspots response', { text: text.slice(0, 200) });
     return [];
   }
+}
+
+function extractFilePath(component: string): string {
+  const colonIdx = component.indexOf(':');
+  return colonIdx >= 0 ? component.slice(colonIdx + 1) : component;
+}
+
+function buildBacklogIssueTitle(issue: SonarIssue): string {
+  const rule = issue.rule ?? issue.type;
+  const filePath = extractFilePath(issue.component);
+  return `[SonarQube] ${rule} — ${filePath}`;
+}
+
+function buildBacklogIssueDescription(issue: SonarIssue): string {
+  const rule = issue.rule ?? issue.type;
+  const filePath = extractFilePath(issue.component);
+  const lineRef = issue.line !== undefined ? String(issue.line) : 'N/A';
+  return [
+    `**Règle** : ${rule}`,
+    `**Fichier** : ${filePath}`,
+    `**Ligne** : ${lineRef}`,
+    `**Message** : ${issue.message}`,
+    `**Sévérité** : ${issue.severity}`,
+  ].join('\n');
+}
+
+interface RawGitLabIssue {
+  title?: string;
+}
+
+async function fetchOpenBacklogTitles(
+  mcpGitlabUrl: string,
+  projectId: number,
+  auditCtx?: AuditContext,
+): Promise<Set<string>> {
+  try {
+    const text = await callMcpTool('static-analysis-worker', mcpGitlabUrl, 'gitlab_list_issues', {
+      project_id: String(projectId),
+      labels: 'backlog',
+      state: 'opened',
+    }, auditCtx);
+    const items = JSON.parse(text || '[]') as RawGitLabIssue[];
+    return new Set(Array.isArray(items) ? items.map((i) => i.title ?? '') : []);
+  } catch {
+    log.warn('Failed to fetch existing backlog issues — proceeding without dedup', { projectId });
+    return new Set();
+  }
+}
+
+export async function createBacklogIssues(
+  mcpGitlabUrl: string,
+  projectId: number,
+  issues: SonarIssue[],
+  auditCtx?: AuditContext,
+): Promise<{ created: number; skipped: number }> {
+  if (issues.length === 0) return { created: 0, skipped: 0 };
+
+  const existingTitles = await fetchOpenBacklogTitles(mcpGitlabUrl, projectId, auditCtx);
+  let created = 0;
+  let skipped = 0;
+
+  for (const issue of issues) {
+    const title = buildBacklogIssueTitle(issue);
+    if (existingTitles.has(title)) {
+      skipped++;
+      continue;
+    }
+    try {
+      await callMcpTool('static-analysis-worker', mcpGitlabUrl, 'gitlab_create_issue', {
+        project_id: String(projectId),
+        title,
+        description: buildBacklogIssueDescription(issue),
+        labels: 'backlog',
+      }, auditCtx);
+      created++;
+    } catch (err) {
+      log.warn('Failed to create backlog issue — skipping', {
+        title,
+        error: err instanceof Error ? err.message : String(err),
+      });
+      skipped++;
+    }
+  }
+
+  log.info('Backlog issues sync done', { projectId, created, skipped });
+  return { created, skipped };
 }
 
 export async function fetchSonarIssues(
@@ -139,7 +229,7 @@ export async function runStaticAnalysisAgent(input: StaticAnalysisInput): Promis
   let metricModere = 0;
 
   try {
-  const { projectKey, mcpSonarqubeUrl } = staticAnalysisConfig();
+  const { projectKey, mcpSonarqubeUrl, mcpGitlabUrl } = staticAnalysisConfig();
   log.info('Static analysis agent starting', { mrIid: input.mrIid, branchName: input.branchName });
 
   const allIssues = await fetchSonarIssues(mcpSonarqubeUrl, projectKey, input.branchName, auditCtx);
@@ -158,6 +248,14 @@ export async function runStaticAnalysisAgent(input: StaticAnalysisInput): Promis
       line:      i.line,
     })),
   });
+
+  try {
+    await createBacklogIssues(mcpGitlabUrl, input.projectId, modéré, auditCtx);
+  } catch (err) {
+    log.warn('Backlog issue creation failed — analysis result unaffected', {
+      error: err instanceof Error ? err.message : String(err),
+    });
+  }
 
   analysisSucceeded = true;
   metricBloquant = bloquant.length;
