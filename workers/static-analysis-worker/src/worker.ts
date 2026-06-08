@@ -2,6 +2,7 @@ import { Worker, NativeConnection } from '@temporalio/worker';
 import { createHealthServer } from '@factory/worker-shared';
 import * as staticAnalysisActivities from './activities/staticAnalysisAgent.js';
 import * as fixStaticActivities from './activities/fixStaticIssues.js';
+import * as verifyAndMergeActivities from './activities/verifyAndMerge.js';
 
 export async function startWorker(env: Record<string, string | undefined> = process.env): Promise<void> {
   const taskQueue  = env.TEMPORAL_TASK_QUEUE ?? 'static-analysis-agent';
@@ -16,7 +17,7 @@ export async function startWorker(env: Record<string, string | undefined> = proc
     connection,
     namespace,
     taskQueue,
-    activities: { ...staticAnalysisActivities, ...fixStaticActivities },
+    activities: { ...staticAnalysisActivities, ...fixStaticActivities, ...verifyAndMergeActivities },
   });
 
   process.on('SIGTERM', () => { healthServer.close(); worker.shutdown(); });

@@ -19,18 +19,19 @@ const { applyWorkflowLabel, closeIssue, addIssueComment, logStageMetric } = prox
   gitlabActivityOptions()
 );
 
-const { runDevAgent, runFixReviewAgent, runMergeAgent } =
+const { runDevAgent, runFixReviewAgent } =
   proxyActivities<typeof agents>(agentActivityOptions());
 
 const { reviewCode } = proxyActivities<typeof reviewActivities>(reviewAgentActivityOptions());
 
-const { runStaticAnalysisAgent, runFixStaticAgent } =
+const { runStaticAnalysisAgent, runFixStaticAgent, runVerifyAndMergeAgent } =
   proxyActivities<typeof staticAnalysisActivities>(staticAnalysisActivityOptions());
 
-const approveMergeSignal             = defineSignal('approve-merge');
-const resumeSignal                    = defineSignal('resume');
-const sonarqubeScanCompletedSignal    = defineSignal<[SonarqubeScanResult]>('sonarqube-scan-completed');
-const reviewFixCompletedSignal        = defineSignal<[ReviewFixResult]>('review-fix-completed');
+const approveMergeSignal                = defineSignal('approve-merge');
+const resumeSignal                      = defineSignal('resume');
+const sonarqubeScanCompletedSignal      = defineSignal<[SonarqubeScanResult]>('sonarqube-scan-completed');
+const reviewFixCompletedSignal          = defineSignal<[ReviewFixResult]>('review-fix-completed');
+const verifyAndMergeCompletedSignal     = defineSignal<[{ status: 'success' | 'failure' }]>('verify-and-merge-completed');
 
 const issueIidKey = defineSearchAttributeKey('GitLabIssueIid', 'INT');
 const stageKey    = defineSearchAttributeKey('PipelineStage', 'KEYWORD');
@@ -129,10 +130,12 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   const scanResultVersion = { value: 0 };
   let sonarqubeScanResult: SonarqubeScanResult | undefined;
   let reviewFixResult: ReviewFixResult | undefined;
+  let verifyAndMergeResult: { status: 'success' | 'failure' } | undefined;
 
   setHandler(resumeSignal, () => { resumeCountRef.value++; });
   setHandler(sonarqubeScanCompletedSignal, (r) => { sonarqubeScanResult = r; scanResultVersion.value++; });
   setHandler(reviewFixCompletedSignal, (r) => { reviewFixResult = r; });
+  setHandler(verifyAndMergeCompletedSignal, (r) => { verifyAndMergeResult = r; });
 
   const ctx: SuspendCtx = { pid, iid, L, notifyEnabled: notify.enabled, resumeCountRef, currentLabelRef };
 
@@ -270,15 +273,25 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   const mergeStartTime = Date.now();
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.merge }]);
   await applyLabel(L.merge, currentLabelRef.value);
-  log.info('Starting merge agent', { issueIid: iid });
-  await withSuspendOnFailure(ctx, 'merge', PIPELINE_STAGE.merge, () => runMergeAgent(input));
+  log.info('Starting verify-and-merge agent', { issueIid: iid });
+
+  const mergeResult = await withSuspendOnFailure(ctx, 'merge', PIPELINE_STAGE.merge, () =>
+    runVerifyAndMergeAgent({ ...input, mrIid: devOutput.mrIid, branchName: devOutput.branchName })
+  );
+
   await logStageMetric({
     workflowId: workflowInfo().workflowId,
     stage: 'merge',
-    status: 'success',
+    status: verifyAndMergeResult?.status ?? mergeResult.status,
     durationMs: Date.now() - mergeStartTime,
   });
 
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.done }]);
-  await closeIssue(pid, iid);
+  if (mergeResult.status === 'success') {
+    await closeIssue(pid, iid);
+  } else {
+    log.warn('Pipeline completed — merge skipped due to residual blocking issues', {
+      issueIid: iid, blockingCount: mergeResult.blockingCount,
+    });
+  }
 }

@@ -22,6 +22,10 @@ vi.mock('./activities/staticAnalysisAgent.js', () => ({
   runStaticAnalysisAgent: vi.fn(),
 }));
 
+vi.mock('./activities/verifyAndMerge.js', () => ({
+  runVerifyAndMergeAgent: vi.fn(),
+}));
+
 import { startWorker } from './worker.js';
 
 describe('startWorker', () => {
@@ -63,12 +67,15 @@ describe('startWorker', () => {
     }));
   });
 
-  it('passes runStaticAnalysisAgent activities to Worker.create', async () => {
+  it('passes runStaticAnalysisAgent and runVerifyAndMergeAgent activities to Worker.create', async () => {
     await startWorker({});
 
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
-        activities: expect.objectContaining({ runStaticAnalysisAgent: expect.any(Function) }),
+        activities: expect.objectContaining({
+          runStaticAnalysisAgent: expect.any(Function),
+          runVerifyAndMergeAgent: expect.any(Function),
+        }),
       })
     );
   });
