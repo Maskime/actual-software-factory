@@ -1,0 +1,640 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana",    "id": "grafana",     "name": "Grafana",     "version": "11.0.0" },
+    { "type": "datasource", "id": "loki",        "name": "Loki",        "version": "1.0.0"  },
+    { "type": "panel",      "id": "stat",        "name": "Stat",        "version": ""        },
+    { "type": "panel",      "id": "timeseries",  "name": "Time series", "version": ""        },
+    { "type": "panel",      "id": "table",       "name": "Table",       "version": ""        },
+    { "type": "panel",      "id": "logs",        "name": "Logs",        "version": ""        }
+  ],
+  "uid": "factory-pipeline-runs-v1",
+  "title": "Factory — Pipeline Runs",
+  "tags": ["factory", "pipeline"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "30s",
+  "time": { "from": "now-24h", "to": "now" },
+  "timepicker": {},
+  "templating": {
+    "list": [
+      {
+        "hide": 2,
+        "name": "DS_LOKI",
+        "query": "loki",
+        "type": "datasource"
+      },
+      {
+        "hide": 0,
+        "label": "Workflow ID",
+        "name": "workflowId",
+        "options": [],
+        "query": "",
+        "type": "textbox",
+        "current": { "selected": false, "text": "", "value": "" }
+      }
+    ]
+  },
+  "panels": [
+    {
+      "id": 100,
+      "type": "row",
+      "title": "Dernières 24h",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Dev réussis",
+      "description": "Pipelines ayant passé l'étape dev avec succès",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 1 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"agent-worker\"} | json | type=`metric` | stage=`dev` | status=`success` [$__range])",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "Merges réussis",
+      "description": "Pipelines ayant été mergés avec succès",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 1 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"pipeline-worker\"} | json | type=`metric` | stage=`merge` | status=`success` [$__range])",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "En cours (est.)",
+      "description": "Dev réussis moins merges réussis — approximation des pipelines actifs dans la fenêtre",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 1 },
+      "datasource": { "type": "datasource", "uid": "-- Mixed --" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "orange" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"agent-worker\"} | json | type=`metric` | stage=`dev` | status=`success` [$__range])",
+          "refId": "A",
+          "queryType": "instant",
+          "hide": true
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"pipeline-worker\"} | json | type=`metric` | stage=`merge` | status=`success` [$__range])",
+          "refId": "B",
+          "queryType": "instant",
+          "hide": true
+        },
+        {
+          "datasource": { "uid": "__expr__", "type": "__expr__" },
+          "type": "math",
+          "expression": "$A - $B",
+          "refId": "C",
+          "hide": false
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Taux de succès",
+      "description": "Merges réussis / Dev réussis × 100. N/A si aucun pipeline démarré.",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 1 },
+      "datasource": { "type": "datasource", "uid": "-- Mixed --" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "mappings": [],
+          "noValue": "N/A",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 50   },
+              { "color": "green",  "value": 80   }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"agent-worker\"} | json | type=`metric` | stage=`dev` | status=`success` [$__range])",
+          "refId": "A",
+          "queryType": "instant",
+          "hide": true
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"pipeline-worker\"} | json | type=`metric` | stage=`merge` | status=`success` [$__range])",
+          "refId": "B",
+          "queryType": "instant",
+          "hide": true
+        },
+        {
+          "datasource": { "uid": "__expr__", "type": "__expr__" },
+          "type": "math",
+          "expression": "$B / $A * 100",
+          "refId": "C",
+          "hide": false
+        }
+      ]
+    },
+    {
+      "id": 101,
+      "type": "row",
+      "title": "Derniers 7 jours",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 5,
+      "type": "stat",
+      "title": "Dev réussis (7j)",
+      "description": "Pipelines ayant passé l'étape dev avec succès sur les 7 derniers jours",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 6 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "blue" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "blue", "value": null }] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"agent-worker\"} | json | type=`metric` | stage=`dev` | status=`success` [7d])",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 6,
+      "type": "stat",
+      "title": "Merges réussis (7j)",
+      "description": "Pipelines mergés avec succès sur les 7 derniers jours",
+      "gridPos": { "h": 4, "w": 6, "x": 6, "y": 6 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"pipeline-worker\"} | json | type=`metric` | stage=`merge` | status=`success` [7d])",
+          "refId": "A",
+          "queryType": "instant"
+        }
+      ]
+    },
+    {
+      "id": 7,
+      "type": "stat",
+      "title": "En cours (7j, est.)",
+      "description": "Dev réussis moins merges réussis sur 7 jours — approximation",
+      "gridPos": { "h": 4, "w": 6, "x": 12, "y": 6 },
+      "datasource": { "type": "datasource", "uid": "-- Mixed --" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "value",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "orange" },
+          "mappings": [],
+          "noValue": "0",
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "orange", "value": null }] }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"agent-worker\"} | json | type=`metric` | stage=`dev` | status=`success` [7d])",
+          "refId": "A",
+          "queryType": "instant",
+          "hide": true
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"pipeline-worker\"} | json | type=`metric` | stage=`merge` | status=`success` [7d])",
+          "refId": "B",
+          "queryType": "instant",
+          "hide": true
+        },
+        {
+          "datasource": { "uid": "__expr__", "type": "__expr__" },
+          "type": "math",
+          "expression": "$A - $B",
+          "refId": "C",
+          "hide": false
+        }
+      ]
+    },
+    {
+      "id": 8,
+      "type": "stat",
+      "title": "Taux de succès (7j)",
+      "description": "Merges réussis / Dev réussis × 100 sur 7 jours",
+      "gridPos": { "h": 4, "w": 6, "x": 18, "y": 6 },
+      "datasource": { "type": "datasource", "uid": "-- Mixed --" },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "colorMode": "background",
+        "graphMode": "none",
+        "textMode": "auto",
+        "orientation": "auto"
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percent",
+          "mappings": [],
+          "noValue": "N/A",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red",    "value": null },
+              { "color": "yellow", "value": 50   },
+              { "color": "green",  "value": 80   }
+            ]
+          },
+          "color": { "mode": "thresholds" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"agent-worker\"} | json | type=`metric` | stage=`dev` | status=`success` [7d])",
+          "refId": "A",
+          "queryType": "instant",
+          "hide": true
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"pipeline-worker\"} | json | type=`metric` | stage=`merge` | status=`success` [7d])",
+          "refId": "B",
+          "queryType": "instant",
+          "hide": true
+        },
+        {
+          "datasource": { "uid": "__expr__", "type": "__expr__" },
+          "type": "math",
+          "expression": "$B / $A * 100",
+          "refId": "C",
+          "hide": false
+        }
+      ]
+    },
+    {
+      "id": 9,
+      "type": "timeseries",
+      "title": "Runs par heure",
+      "description": "Pipelines démarrés (dev success) vs terminés (merge success) sur la période",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 10 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 50,
+            "lineWidth": 1,
+            "spanNulls": false
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "Démarrés" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "blue" } }]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Terminés" },
+            "properties": [{ "id": "color", "value": { "mode": "fixed", "fixedColor": "green" } }]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"agent-worker\"} | json | type=`metric` | stage=`dev` | status=`success` [$__interval])",
+          "refId": "A",
+          "queryType": "range",
+          "legendFormat": "Démarrés"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "count_over_time({service=\"pipeline-worker\"} | json | type=`metric` | stage=`merge` | status=`success` [$__interval])",
+          "refId": "B",
+          "queryType": "range",
+          "legendFormat": "Terminés"
+        }
+      ]
+    },
+    {
+      "id": 10,
+      "type": "timeseries",
+      "title": "Durée moyenne par étape",
+      "description": "Temps moyen passé dans chaque étape du pipeline (en ms)",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 10 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "tooltip": { "mode": "multi", "sort": "none" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+      },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ms",
+          "custom": {
+            "drawStyle": "line",
+            "lineInterpolation": "smooth",
+            "fillOpacity": 10,
+            "lineWidth": 2,
+            "spanNulls": true
+          },
+          "color": { "mode": "palette-classic" }
+        },
+        "overrides": []
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "avg_over_time({service=\"agent-worker\"} | json | type=`metric` | stage=`dev` | unwrap durationMs [$__interval])",
+          "refId": "A",
+          "queryType": "range",
+          "legendFormat": "dev"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "avg_over_time({service=\"review-worker\"} | json | type=`metric` | stage=`review` | unwrap durationMs [$__interval])",
+          "refId": "B",
+          "queryType": "range",
+          "legendFormat": "review"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "avg_over_time({service=\"review-fix-worker\"} | json | type=`metric` | stage=`fix` | unwrap durationMs [$__interval])",
+          "refId": "C",
+          "queryType": "range",
+          "legendFormat": "fix"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "avg_over_time({service=\"static-analysis-worker\"} | json | type=`metric` | stage=`sonarqube` | unwrap durationMs [$__interval])",
+          "refId": "D",
+          "queryType": "range",
+          "legendFormat": "sonarqube"
+        },
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "avg_over_time({service=\"pipeline-worker\"} | json | type=`metric` | stage=`merge` | unwrap durationMs [$__interval])",
+          "refId": "E",
+          "queryType": "range",
+          "legendFormat": "merge"
+        }
+      ]
+    },
+    {
+      "id": 102,
+      "type": "row",
+      "title": "Historique des runs",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 18 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 11,
+      "type": "table",
+      "title": "Historique des runs récents",
+      "description": "Cliquer sur un workflowId pour voir son audit trail ci-dessous",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 19 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "sortBy": [{ "desc": true, "displayName": "Time" }],
+        "footer": { "show": false, "reducer": ["sum"], "countRows": false },
+        "showHeader": true,
+        "cellHeight": "sm"
+      },
+      "transformations": [
+        {
+          "id": "filterFieldsByName",
+          "options": {
+            "include": {
+              "pattern": "^(Time|workflowId|stage|status|durationMs)$"
+            }
+          }
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "displayMode": "auto",
+            "filterable": true,
+            "inspect": false
+          }
+        },
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "workflowId" },
+            "properties": [
+              { "id": "custom.width", "value": 300 },
+              { "id": "displayName", "value": "Workflow ID" },
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "title": "Voir audit trail",
+                    "url": "/d/factory-pipeline-runs-v1?var-workflowId=${__value.raw}&${__url_time_range}",
+                    "targetBlank": false
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "stage" },
+            "properties": [
+              { "id": "custom.width", "value": 110 },
+              { "id": "displayName", "value": "Étape" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "status" },
+            "properties": [
+              { "id": "custom.width", "value": 110 },
+              { "id": "displayName", "value": "Statut" },
+              {
+                "id": "mappings",
+                "value": [
+                  {
+                    "type": "value",
+                    "options": {
+                      "success": { "text": "✓ success", "color": "green",  "index": 0 },
+                      "failure": { "text": "✗ failure", "color": "red",    "index": 1 }
+                    }
+                  }
+                ]
+              },
+              { "id": "custom.displayMode", "value": "color-background" }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "durationMs" },
+            "properties": [
+              { "id": "unit",         "value": "ms"    },
+              { "id": "displayName",  "value": "Durée" },
+              { "id": "custom.width", "value": 120     }
+            ]
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "{service=~\"agent-worker|review-worker|review-fix-worker|static-analysis-worker|pipeline-worker\"} | json | type=`metric`",
+          "refId": "A",
+          "queryType": "range",
+          "maxLines": 1000
+        }
+      ]
+    },
+    {
+      "id": 103,
+      "type": "row",
+      "title": "Audit trail",
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 28 },
+      "collapsed": false,
+      "panels": []
+    },
+    {
+      "id": 12,
+      "type": "logs",
+      "title": "Audit trail — ${workflowId}",
+      "description": "Tous les appels MCP et LLM pour le pipeline sélectionné. Sélectionner un Workflow ID dans le tableau ci-dessus ou saisir dans la variable en haut.",
+      "gridPos": { "h": 9, "w": 24, "x": 0, "y": 29 },
+      "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+      "options": {
+        "dedupStrategy": "none",
+        "showLabels": false,
+        "showTime": true,
+        "wrapLogMessage": true,
+        "prettifyLogMessage": true,
+        "enableLogDetails": true,
+        "maxDataPoints": 500,
+        "sortOrder": "Ascending"
+      },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${DS_LOKI}" },
+          "expr": "{service=~\"agent-worker|review-worker|review-fix-worker|static-analysis-worker|pipeline-worker\"} | json | workflowId=`${workflowId}`",
+          "refId": "A",
+          "queryType": "range",
+          "maxLines": 500
+        }
+      ]
+    }
+  ]
+}
