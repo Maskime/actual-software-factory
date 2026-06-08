@@ -1,5 +1,6 @@
 import type { ActivityOptions } from '@temporalio/workflow';
 import type { Duration } from '@temporalio/common';
+import type { AlertingConfig } from './alerting.js';
 
 // process.env references here are replaced at bundle time by webpack's DefinePlugin
 // (configured in worker.ts), ensuring they are resolved in the worker process
@@ -84,5 +85,18 @@ export function webhookConfig(): { port: number; secret: string } {
 export function sonarqubeCiTimeoutConfig(): { timeout: Duration } {
   return {
     timeout: (process.env.SONARQUBE_CI_TIMEOUT ?? '30 minutes') as Duration,
+  };
+}
+
+export function alertingConfig(address: string, namespace: string): AlertingConfig {
+  const webhookUrl = process.env.ALERT_WEBHOOK_URL ?? '';
+  const timeoutMinutes = Number.parseInt(process.env.PIPELINE_TIMEOUT_MINUTES ?? '60', 10);
+  return {
+    enabled: webhookUrl !== '',
+    timeoutMs: timeoutMinutes * 60_000,
+    webhookUrl,
+    checkIntervalMs: Math.max(60_000, Math.ceil(timeoutMinutes / 6) * 60_000),
+    address,
+    namespace,
   };
 }
