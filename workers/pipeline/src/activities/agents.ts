@@ -9,6 +9,6 @@ export async function runFixReviewAgent(_input: PipelineInput): Promise<void> {
   // Implemented in EPIC-07
 }
 
+// Reserved — superseded by runVerifyAndMergeAgent (static-analysis-agent task queue, EPIC-09 US-5)
 export async function runMergeAgent(_input: PipelineInput): Promise<void> {
-  // Implemented in EPIC-09
 }
