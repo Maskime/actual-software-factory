@@ -287,11 +287,11 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
   });
 
   upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.done }]);
-  if (mergeResult.status === 'success') {
-    await closeIssue(pid, iid);
-  } else {
+  if (mergeResult.status !== 'success') {
     log.warn('Pipeline completed — merge skipped due to residual blocking issues', {
       issueIid: iid, blockingCount: mergeResult.blockingCount,
     });
+    return;
   }
+  await closeIssue(pid, iid);
 }
