@@ -7,6 +7,7 @@ import {
   handleListPipelineJobs,
   handleGetJobLog,
   handleGetTestReport,
+  handleRetryJob,
 } from "./pipelines.js";
 
 function makeMockClient() {
@@ -305,5 +306,68 @@ describe("handleGetTestReport()", () => {
       pipeline_id: 101,
     });
     expect(mockClient.get.mock.calls[0][0]).toContain("/pipelines/101/test_report");
+  });
+});
+
+describe("handleRetryJob()", () => {
+  let mockClient: ReturnType<typeof makeMockClient>;
+
+  beforeEach(() => {
+    mockClient = makeMockClient();
+  });
+
+  const retryJobResponse = {
+    id: 202,
+    status: "pending",
+    name: "test",
+    web_url: "http://gitlab/project/-/jobs/202",
+  };
+
+  it("returns retried job info on success", async () => {
+    mockClient.post.mockResolvedValue(retryJobResponse);
+    const result = await handleRetryJob(
+      mockClient as unknown as GitLabClient,
+      { project_id: "3", job_id: 201 }
+    );
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.id).toBe(202);
+    expect(parsed.status).toBe("pending");
+    expect(parsed.name).toBe("test");
+    expect(parsed.web_url).toBe("http://gitlab/project/-/jobs/202");
+  });
+
+  it("calls the correct API path", async () => {
+    mockClient.post.mockResolvedValue(retryJobResponse);
+    await handleRetryJob(mockClient as unknown as GitLabClient, {
+      project_id: "3",
+      job_id: 201,
+    });
+    expect(mockClient.post.mock.calls[0][0]).toContain("/jobs/201/retry");
+  });
+
+  it("returns errorResponse when job is not found (404)", async () => {
+    mockClient.post.mockRejectedValue(
+      new GitLabApiError("not found", 404, "GITLAB_NOT_FOUND")
+    );
+    const result = await handleRetryJob(
+      mockClient as unknown as GitLabClient,
+      { project_id: "3", job_id: 999 }
+    );
+    expect(result.isError).toBe(true);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.error.code).toBe("GITLAB_NOT_FOUND");
+  });
+
+  it("returns errorResponse when job is not retryable (403)", async () => {
+    mockClient.post.mockRejectedValue(
+      new GitLabApiError("forbidden", 403, "GITLAB_AUTH_ERROR")
+    );
+    const result = await handleRetryJob(
+      mockClient as unknown as GitLabClient,
+      { project_id: "3", job_id: 201 }
+    );
+    expect(result.isError).toBe(true);
+    const parsed = JSON.parse(result.content[0].text);
+    expect(parsed.error.statusCode).toBe(403);
   });
 });
