@@ -224,6 +224,46 @@ export async function handleGetJobLog(
   }
 }
 
+// gitlab_retry_job
+
+interface GitLabRetryJobResponse {
+  id: number;
+  status: string;
+  name: string;
+  web_url: string;
+}
+
+export const retryJobSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  job_id: z.number().int().positive().describe("Job ID to retry"),
+});
+
+export async function handleRetryJob(
+  client: GitLabClient,
+  params: z.infer<typeof retryJobSchema>
+): Promise<ToolResult> {
+  try {
+    const job = await client.post<GitLabRetryJobResponse>(
+      `${projectPath(params.project_id)}/jobs/${params.job_id}/retry`
+    );
+    return {
+      content: [
+        {
+          type: "text" as const,
+          text: JSON.stringify({
+            id: job.id,
+            status: job.status,
+            name: job.name,
+            web_url: job.web_url,
+          }),
+        },
+      ],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
 // gitlab_get_test_report
 
 export const getTestReportSchema = z.object({

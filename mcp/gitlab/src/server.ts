@@ -64,6 +64,8 @@ import {
   handleGetJobLog,
   getTestReportSchema,
   handleGetTestReport,
+  retryJobSchema,
+  handleRetryJob,
 } from "./tools/pipelines.js";
 import {
   listProjectsSchema,
@@ -290,6 +292,14 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     "Get the test report of a GitLab CI/CD pipeline. Returns total, success, failed, error, and skipped test counts plus per-suite breakdown. Returns a structured error if no test report exists for the pipeline.",
     getTestReportSchema.shape,
     (params) => handleGetTestReport(client, params)
+  );
+
+  server.tool(
+    "gitlab_retry_job",
+    "Retry a failed or cancelled GitLab CI/CD job. Returns the new job id, status, name, and URL. " +
+      "Fails with a structured error if the job does not exist or is not in a retryable state (failed/cancelled).",
+    retryJobSchema.shape,
+    (params) => handleRetryJob(client, params)
   );
 
   server.tool(
