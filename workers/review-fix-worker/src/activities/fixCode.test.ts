@@ -13,6 +13,7 @@ vi.mock('@factory/worker-shared', () => ({
   auditLog: vi.fn(),
   metricLog: vi.fn(),
   summarize: vi.fn((v: unknown) => String(v)),
+  loadPrompt: vi.fn().mockReturnValue('test prompt'),
 }));
 
 vi.mock('@temporalio/activity', () => ({

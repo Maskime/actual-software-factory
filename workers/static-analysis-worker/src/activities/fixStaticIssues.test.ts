@@ -11,6 +11,7 @@ vi.mock('@factory/worker-shared', () => ({
   auditLog: mockAuditLog,
   summarize: mockSummarize,
   createAnthropicClient: vi.fn(() => mockAnthropicClient),
+  loadPrompt: vi.fn().mockReturnValue('test prompt'),
 }));
 
 vi.mock('@temporalio/activity', () => ({
