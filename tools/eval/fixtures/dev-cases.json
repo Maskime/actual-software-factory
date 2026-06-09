@@ -1,0 +1,5 @@
+[
+  { "iid": 77, "description": "Setup du container worker avec environnement git + TypeScript" },
+  { "iid": 78, "description": "Clone du repository et lecture de l'issue" },
+  { "iid": 79, "description": "Génération du code selon le cycle plan/critique/révision/implémentation/vérification" }
+]

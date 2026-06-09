@@ -1,11 +1,10 @@
 import { ApplicationFailure, activityInfo, log } from '@temporalio/activity';
 import Anthropic from '@anthropic-ai/sdk';
 import {
-  callMcpTool as sharedCallMcpTool, auditLog, metricLog, summarize,
+  callMcpTool as sharedCallMcpTool, auditLog, loadPrompt, metricLog, summarize,
   type ReviewComment, type ReviewAgentOutput, type AuditContext,
 } from '@factory/worker-shared';
 import {
-  REVIEW_AGENT_SYSTEM,
   SUBMIT_REVIEW_TOOL,
   buildReviewAgentMessage,
 } from '../prompts/review-agent.js';
@@ -258,7 +257,7 @@ async function analyzeWithClaude(
     system: [
       {
         type: 'text',
-        text: REVIEW_AGENT_SYSTEM,
+        text: loadPrompt('review-code'),
         cache_control: { type: 'ephemeral' },
       },
     ],

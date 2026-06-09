@@ -1,8 +1,8 @@
 import { ApplicationFailure, activityInfo, log } from '@temporalio/activity';
 import Anthropic from '@anthropic-ai/sdk';
-import { callMcpTool, createAnthropicClient, auditLog, summarize, type AuditContext } from '@factory/worker-shared';
+import { callMcpTool, createAnthropicClient, auditLog, loadPrompt, summarize, type AuditContext } from '@factory/worker-shared';
 import { fetchSonarIssues, classifyIssue, type SonarIssue } from './staticAnalysisAgent.js';
-import { FIX_STATIC_AGENT_SYSTEM, APPLY_FIX_TOOL, buildFixStaticAgentMessage } from '../prompts/fix-static-agent.js';
+import { APPLY_FIX_TOOL, buildFixStaticAgentMessage } from '../prompts/fix-static-agent.js';
 
 export interface FixStaticInput {
   issueIid: number;
@@ -85,7 +85,7 @@ async function generateFix(
   const response = await client.messages.create({
     model,
     max_tokens: 4096,
-    system: [{ type: 'text', text: FIX_STATIC_AGENT_SYSTEM, cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: loadPrompt('static-analysis-fix'), cache_control: { type: 'ephemeral' } }],
     tools: [APPLY_FIX_TOOL],
     tool_choice: { type: 'tool', name: 'apply_fix' },
     messages: [

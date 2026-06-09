@@ -1,0 +1,19 @@
+{
+  "name": "@factory/eval",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "eval": "tsx src/index.ts",
+    "eval:dev": "tsx src/index.ts --agent dev",
+    "eval:review": "tsx src/index.ts --agent review"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.102.0",
+    "@factory/worker-shared": "^0.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.7",
+    "tsx": "^4.22.4",
+    "typescript": "^5.8.0"
+  }
+}

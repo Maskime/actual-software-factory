@@ -330,6 +330,9 @@ services:
       MCP_TEMPORAL_INTERNAL_URL: "http://mcp-temporal:3000/mcp"
       MCP_SONARQUBE_INTERNAL_URL: "http://mcp-sonarqube:3000/mcp"
       HEALTH_PORT: "9090"
+      PROMPTS_DIR: "/app/prompts"
+    volumes:
+      - ../workers/prompts:/app/prompts:ro
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:9090/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s
@@ -367,6 +370,9 @@ services:
       ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
       MCP_GITLAB_INTERNAL_URL: "http://mcp-gitlab:3000/mcp"
       HEALTH_PORT: "9092"
+      PROMPTS_DIR: "/app/prompts"
+    volumes:
+      - ../workers/prompts:/app/prompts:ro
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:9092/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s
@@ -402,6 +408,9 @@ services:
       ANTHROPIC_MODEL: "${ANTHROPIC_MODEL:-claude-sonnet-4-6}"
       MCP_GITLAB_INTERNAL_URL: "http://mcp-gitlab:3000/mcp"
       HEALTH_PORT: "9093"
+      PROMPTS_DIR: "/app/prompts"
+    volumes:
+      - ../workers/prompts:/app/prompts:ro
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:9093/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s
@@ -439,6 +448,9 @@ services:
       MCP_SONARQUBE_INTERNAL_URL: "http://mcp-sonarqube:3000/mcp"
       SONARQUBE_PROJECT_KEY: "${SONARQUBE_PROJECT_KEY}"
       HEALTH_PORT: "9094"
+      PROMPTS_DIR: "/app/prompts"
+    volumes:
+      - ../workers/prompts:/app/prompts:ro
     healthcheck:
       test: ["CMD-SHELL", "node -e \"fetch('http://localhost:9094/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))\""]
       interval: 10s

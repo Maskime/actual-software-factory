@@ -1,7 +1,7 @@
 import { activityInfo, log } from '@temporalio/activity';
 import Anthropic from '@anthropic-ai/sdk';
-import { callMcpTool, createAnthropicClient, auditLog, metricLog, summarize, type AuditContext } from '@factory/worker-shared';
-import { FIX_AGENT_SYSTEM, APPLY_FIX_TOOL, buildFixAgentMessage } from '../prompts/fix-agent.js';
+import { callMcpTool, createAnthropicClient, auditLog, loadPrompt, metricLog, summarize, type AuditContext } from '@factory/worker-shared';
+import { APPLY_FIX_TOOL, buildFixAgentMessage } from '../prompts/fix-agent.js';
 
 export interface FixCodeInput {
   issueIid: number;
@@ -132,7 +132,7 @@ async function generateFix(
   const response = await client.messages.create({
     model,
     max_tokens: 4096,
-    system: [{ type: 'text', text: FIX_AGENT_SYSTEM, cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: loadPrompt('review-fix-code'), cache_control: { type: 'ephemeral' } }],
     tools: [APPLY_FIX_TOOL],
     tool_choice: { type: 'tool', name: 'apply_fix' },
     messages: [

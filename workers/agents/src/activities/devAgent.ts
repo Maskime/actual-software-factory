@@ -5,17 +5,13 @@ import { rm } from 'node:fs/promises';
 import Anthropic from '@anthropic-ai/sdk';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js';
-import { auditLog, metricLog, summarize, type AuditContext } from '@factory/worker-shared';
+import { auditLog, loadPrompt, metricLog, summarize, type AuditContext } from '@factory/worker-shared';
 import { setupWorkspace } from './setupWorkspace.js';
 import { AGENT_TOOLS, executeTool } from '../tools.js';
 import type { DevAgentOutput, IssueContext, WorkspaceContext } from '../types.js';
 import { slugify } from '../utils.js';
 import {
-  DEV_AGENT_PLAN_SYSTEM,
-  DEV_AGENT_CRITIQUE_SYSTEM,
   DEV_AGENT_MR_DESC_SYSTEM,
-  buildDevAgentImplementSystem,
-  buildDevAgentFixErrorsSystem,
   buildDevAgentPlanMessage,
   buildDevAgentCritiqueMessage,
   buildDevAgentReviseMessage,
@@ -153,7 +149,7 @@ async function generatePlan(issue: IssueContext, workDir: string, auditCtx?: Aud
     system: [
       {
         type: 'text',
-        text: DEV_AGENT_PLAN_SYSTEM,
+        text: loadPrompt('dev-generate-plan'),
         cache_control: { type: 'ephemeral' },
       },
     ],
@@ -196,7 +192,7 @@ async function critiquePlan(issue: IssueContext, plan: string, auditCtx?: AuditC
     system: [
       {
         type: 'text',
-        text: DEV_AGENT_CRITIQUE_SYSTEM,
+        text: loadPrompt('dev-critique-plan'),
         cache_control: { type: 'ephemeral' },
       },
     ],
@@ -347,7 +343,7 @@ async function implementPlan(
 
   const systemPrompt: Anthropic.TextBlockParam = {
     type: 'text',
-    text: buildDevAgentImplementSystem(workDir),
+    text: `${loadPrompt('dev-implement-plan')}Workspace root: ${workDir}\nAll file paths are relative to the workspace root.`,
     cache_control: { type: 'ephemeral' },
   };
 
@@ -367,7 +363,7 @@ async function fixErrors(errors: string, issue: IssueContext, workDir: string): 
 
   const systemPrompt: Anthropic.TextBlockParam = {
     type: 'text',
-    text: buildDevAgentFixErrorsSystem(workDir),
+    text: `${loadPrompt('dev-fix-errors')}Workspace root: ${workDir}`,
     cache_control: { type: 'ephemeral' },
   };
 

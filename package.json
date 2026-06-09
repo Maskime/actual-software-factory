@@ -4,6 +4,7 @@
   "workspaces": [
     "mcp/*",
     "workers/*",
+    "tools/*",
     "apps"
   ],
   "scripts": {
