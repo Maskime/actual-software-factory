@@ -1,7 +1,7 @@
 import Anthropic from '@anthropic-ai/sdk';
 import { loadPrompt } from '@factory/worker-shared';
 import { fetchMrDiffs } from './gitlab.js';
-import { type EvalResult, promptHash, scoreCriteriaHit, scoreMentionsFiles, scoreStructure } from './metrics.js';
+import { type EvalResult, promptHash, scoreCriteriaHit, scoreMentionsFiles } from './metrics.js';
 
 const SUBMIT_REVIEW_TOOL: Anthropic.Tool = {
   name: 'submit_review',

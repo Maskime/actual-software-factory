@@ -17,7 +17,7 @@ if (values['prompts-dir']) {
   process.env.PROMPTS_DIR = values['prompts-dir'];
 }
 
-const projectId = parseInt(values['project-id'] ?? '3', 10);
+const projectId = Number.parseInt(values['project-id'] ?? '3', 10);
 
 const { default: devCases } = await import('../fixtures/dev-cases.json', { with: { type: 'json' } });
 const { default: reviewCases } = await import('../fixtures/review-cases.json', { with: { type: 'json' } });

@@ -13,6 +13,8 @@ function extractCriteria(description: string): string[] {
 
 function buildUserMessage(issue: { title: string; description: string }, dirListing: string): string {
   const criteria = extractCriteria(issue.description);
+  const criteriaLines = criteria.map((c, i) => `${i + 1}. ${c}`).join('\n');
+  const criteriaSection = criteria.length > 0 ? `**Acceptance Criteria**:\n${criteriaLines}\n` : '';
   return `## User Story
 
 **Title**: ${issue.title}
@@ -20,8 +22,7 @@ function buildUserMessage(issue: { title: string; description: string }, dirList
 **Description**:
 ${issue.description}
 
-${criteria.length > 0 ? `**Acceptance Criteria**:\n${criteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}\n` : ''}
-## Codebase (TypeScript files)
+${criteriaSection}## Codebase (TypeScript files)
 
 \`\`\`
 ${dirListing}
