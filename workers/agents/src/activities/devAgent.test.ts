@@ -18,7 +18,10 @@ vi.mock('@temporalio/activity', () => ({
 
 vi.mock('@anthropic-ai/sdk');
 vi.mock('node:child_process', () => ({ execFile: vi.fn() }));
-vi.mock('node:fs', () => ({ existsSync: vi.fn().mockReturnValue(false) }));
+vi.mock('node:fs', () => ({
+  existsSync: vi.fn().mockReturnValue(false),
+  readFileSync: vi.fn().mockReturnValue('test prompt'),
+}));
 vi.mock('node:fs/promises', () => ({ rm: vi.fn().mockResolvedValue(undefined) }));
 vi.mock('./setupWorkspace.js', () => ({
   setupWorkspace: vi.fn().mockResolvedValue({
