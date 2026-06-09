@@ -4,7 +4,8 @@ import { fileURLToPath } from 'node:url';
 import webpack from 'webpack';
 import * as gitlabActivities from './activities/gitlab.js';
 import { createWebhookServer } from './webhook.js';
-import { webhookConfig } from './config.js';
+import { createAlertingMonitor } from './alerting.js';
+import { webhookConfig, alertingConfig } from './config.js';
 
 const TASK_QUEUE   = process.env.TEMPORAL_TASK_QUEUE ?? 'factory-pipeline';
 const NAMESPACE    = process.env.TEMPORAL_NAMESPACE  ?? 'factory';
@@ -48,6 +49,7 @@ const webhookCfg = webhookConfig();
 const { close: closeWebhook } = await createWebhookServer(
   webhookCfg.port, webhookCfg.secret, NAMESPACE, ADDRESS,
 );
+const alertMonitor = createAlertingMonitor(alertingConfig(ADDRESS, NAMESPACE));
 
 const worker = await Worker.create({
   connection,
@@ -63,8 +65,8 @@ const worker = await Worker.create({
   },
 });
 
-process.on('SIGTERM', () => { healthServer.close(); closeWebhook(); worker.shutdown(); });
-process.on('SIGINT',  () => { healthServer.close(); closeWebhook(); worker.shutdown(); });
+process.on('SIGTERM', () => { healthServer.close(); closeWebhook(); alertMonitor.close(); worker.shutdown(); });
+process.on('SIGINT',  () => { healthServer.close(); closeWebhook(); alertMonitor.close(); worker.shutdown(); });
 
 process.stderr.write(
   `[pipeline-worker] Started (namespace="${NAMESPACE}", taskQueue="${TASK_QUEUE}", address="${ADDRESS}")\n`

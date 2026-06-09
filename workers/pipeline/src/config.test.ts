@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions, staticAnalysisActivityOptions, humanInTheLoopConfig, suspendNotificationConfig } from './config.js'
+import { gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions, staticAnalysisActivityOptions, humanInTheLoopConfig, suspendNotificationConfig, alertingConfig } from './config.js'
 
 const GITLAB_KEYS = [
   'GITLAB_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT',
@@ -210,5 +210,61 @@ describe('suspendNotificationConfig', () => {
   it('returns enabled=true when SUSPEND_NOTIFICATION=true', () => {
     process.env.SUSPEND_NOTIFICATION = 'true'
     expect(suspendNotificationConfig().enabled).toBe(true)
+  })
+})
+
+const ALERTING_KEYS = ['ALERT_WEBHOOK_URL', 'PIPELINE_TIMEOUT_MINUTES'] as const
+
+function clearAlertingEnv() {
+  for (const k of ALERTING_KEYS) delete process.env[k]
+}
+
+describe('alertingConfig', () => {
+  beforeEach(clearAlertingEnv)
+  afterEach(clearAlertingEnv)
+
+  it('returns enabled=false by default (no webhook URL)', () => {
+    expect(alertingConfig('localhost:7233', 'factory').enabled).toBe(false)
+  })
+
+  it('returns timeoutMs of 3_600_000 by default (60 min)', () => {
+    expect(alertingConfig('localhost:7233', 'factory').timeoutMs).toBe(3_600_000)
+  })
+
+  it('returns checkIntervalMs of 600_000 by default (10 min = 60/6)', () => {
+    expect(alertingConfig('localhost:7233', 'factory').checkIntervalMs).toBe(600_000)
+  })
+
+  it('returns enabled=true when ALERT_WEBHOOK_URL is set', () => {
+    process.env.ALERT_WEBHOOK_URL = 'http://example.com/hook'
+    expect(alertingConfig('localhost:7233', 'factory').enabled).toBe(true)
+  })
+
+  it('forwards webhookUrl from ALERT_WEBHOOK_URL', () => {
+    process.env.ALERT_WEBHOOK_URL = 'http://example.com/hook'
+    expect(alertingConfig('localhost:7233', 'factory').webhookUrl).toBe('http://example.com/hook')
+  })
+
+  it('overrides timeoutMs via PIPELINE_TIMEOUT_MINUTES', () => {
+    process.env.PIPELINE_TIMEOUT_MINUTES = '30'
+    expect(alertingConfig('localhost:7233', 'factory').timeoutMs).toBe(1_800_000)
+  })
+
+  it('derives checkIntervalMs from PIPELINE_TIMEOUT_MINUTES', () => {
+    process.env.PIPELINE_TIMEOUT_MINUTES = '30'
+    // ceil(30/6)=5 min = 300_000ms
+    expect(alertingConfig('localhost:7233', 'factory').checkIntervalMs).toBe(300_000)
+  })
+
+  it('clamps checkIntervalMs to 60_000 for very short timeouts', () => {
+    process.env.PIPELINE_TIMEOUT_MINUTES = '1'
+    // ceil(1/6)=1 min = 60_000ms → max(60_000, 60_000) = 60_000
+    expect(alertingConfig('localhost:7233', 'factory').checkIntervalMs).toBe(60_000)
+  })
+
+  it('passes address and namespace through', () => {
+    const cfg = alertingConfig('temporal:7233', 'my-ns')
+    expect(cfg.address).toBe('temporal:7233')
+    expect(cfg.namespace).toBe('my-ns')
   })
 })
