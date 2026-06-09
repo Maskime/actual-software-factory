@@ -135,6 +135,28 @@ services:
       - factory-network
 
   # ---------------------------------------------------------------------------
+  # Factory DB — PostgreSQL 16 + pgvector (EPIC-11 / RAG)
+  # ---------------------------------------------------------------------------
+  factory-db:
+    image: pgvector/pgvector:pg16
+    container_name: factory-db
+    restart: always
+    environment:
+      POSTGRES_USER: factory
+      POSTGRES_PASSWORD: ${FACTORY_DB_PASSWORD}
+      POSTGRES_DB: factory
+    volumes:
+      - factory_db:/var/lib/postgresql/data
+      - ./postgres/init.sql:/docker-entrypoint-initdb.d/001_init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U factory"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+    networks:
+      - factory-network
+
+  # ---------------------------------------------------------------------------
   # Temporal Server — Orchestrateur de workflows (EPIC-01 / US-05)
   # auto-setup : initialise le schéma DB et le namespace "default" au premier démarrage
   # ---------------------------------------------------------------------------
@@ -610,3 +632,4 @@ volumes:
   loki_data:
   grafana_data:
   promtail_positions:
+  factory_db:
