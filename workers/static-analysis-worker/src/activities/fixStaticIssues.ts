@@ -2,6 +2,7 @@ import { ApplicationFailure, activityInfo, log } from '@temporalio/activity';
 import Anthropic from '@anthropic-ai/sdk';
 import { callMcpTool, createAnthropicClient, auditLog, summarize, type AuditContext } from '@factory/worker-shared';
 import { fetchSonarIssues, classifyIssue, type SonarIssue } from './staticAnalysisAgent.js';
+import { FIX_STATIC_AGENT_SYSTEM, APPLY_FIX_TOOL, buildFixStaticAgentMessage } from '../prompts/fix-static-agent.js';
 
 export interface FixStaticInput {
   issueIid: number;
@@ -47,20 +48,6 @@ function buildCommitMessage(issues: SonarIssue[], filePath: string): string {
   return raw.length > 72 ? raw.slice(0, 72) : raw;
 }
 
-const FIX_SYSTEM_PROMPT = `You are a code correction agent. Given a TypeScript/JavaScript file and one or more SonarQube issues detected in it, produce a corrected version that resolves all listed issues. Make minimal, targeted changes. Call apply_fix with the complete corrected file content.`;
-
-const APPLY_FIX_TOOL: Anthropic.Tool = {
-  name: 'apply_fix',
-  description: 'Submit the corrected file content',
-  input_schema: {
-    type: 'object',
-    properties: {
-      fixed_content: { type: 'string', description: 'Complete corrected file content' },
-    },
-    required: ['fixed_content'],
-  },
-};
-
 function buildIssueList(issues: SonarIssue[]): string {
   return issues.map((i) => {
     const lineRef = i.line === undefined ? '' : ` (line ${i.line})`;
@@ -98,21 +85,13 @@ async function generateFix(
   const response = await client.messages.create({
     model,
     max_tokens: 4096,
-    system: [{ type: 'text', text: FIX_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: FIX_STATIC_AGENT_SYSTEM, cache_control: { type: 'ephemeral' } }],
     tools: [APPLY_FIX_TOOL],
     tool_choice: { type: 'tool', name: 'apply_fix' },
     messages: [
       {
         role: 'user',
-        content: `## File: ${filePath}
-
-### Current content
-\`\`\`
-${fileContent}
-\`\`\`
-
-### SonarQube issues to fix
-${buildIssueList(issues)}`,
+        content: buildFixStaticAgentMessage(filePath, fileContent, buildIssueList(issues)),
       },
     ],
   });
