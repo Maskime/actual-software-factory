@@ -51,6 +51,31 @@ describe('ChatThread', () => {
     expect(w.find('.msg-submit-btn').exists()).toBe(false)
   })
 
+  it('renders the last message as raw text while streaming, earlier ones as Markdown', () => {
+    const msgs = [
+      { role: 'assistant' as const, content: '**first**' },
+      { role: 'assistant' as const, content: '**last**' },
+    ]
+    const w = mount(ChatThread, { props: { messages: msgs, isStreaming: true } })
+    const html = w.html()
+    // Earlier message keeps Markdown rendering
+    expect(html).toContain('<strong>first</strong>')
+    // Last (streaming) message stays raw
+    expect(html).not.toContain('<strong>last</strong>')
+    expect(w.find('.asst-text--streaming').exists()).toBe(true)
+  })
+
+  it('renders every message as Markdown when not streaming', () => {
+    const msgs = [
+      { role: 'assistant' as const, content: '**first**' },
+      { role: 'assistant' as const, content: '**last**' },
+    ]
+    const w = mount(ChatThread, { props: { messages: msgs, isStreaming: false } })
+    expect(w.html()).toContain('<strong>first</strong>')
+    expect(w.html()).toContain('<strong>last</strong>')
+    expect(w.find('.asst-text--streaming').exists()).toBe(false)
+  })
+
   it('forwards submit event from ChatMessage to parent', async () => {
     const msgs = [{ role: 'assistant' as const, content: 'Reformulation [FOR_VALIDATION]' }]
     const w = mount(ChatThread, { props: { messages: msgs, isStreaming: false, canSubmit: true, isSubmitting: false } })

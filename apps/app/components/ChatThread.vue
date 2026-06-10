@@ -20,6 +20,7 @@ const emit = defineEmits<{ submit: [] }>()
         :content="msg.content"
         :show-submit="canSubmit"
         :is-submitting="isSubmitting"
+        :streaming="isStreaming && i === messages.length - 1"
         @submit="emit('submit')"
       />
     </template>
