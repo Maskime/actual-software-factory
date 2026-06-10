@@ -151,8 +151,7 @@ export async function indexRepositoryFiles(opts: IndexOptions): Promise<IndexRes
 
     const seen: string[] = []
 
-    for (let i = 0; i < total; i++) {
-      const path = paths[i] as string
+    for (const [i, path] of paths.entries()) {
       logger.info(`[indexer] (${i + 1}/${total}) ${path}`)
 
       const content = await readFileContent(client, projectId, path, ref)
@@ -180,10 +179,12 @@ export async function indexRepositoryFiles(opts: IndexOptions): Promise<IndexRes
           'DELETE FROM embeddings WHERE project_id = $1 AND source_type = $2 AND source_path = $3',
           [opts.projectId, SOURCE_TYPE, path]
         )
-        for (let c = 0; c < chunks.length; c++) {
+        for (const [c, content] of chunks.entries()) {
+          const vector: number[] | undefined = vectors[c]
+          if (vector === undefined) continue
           await db.query(
             'INSERT INTO embeddings (project_id, source_type, source_path, content, content_hash, embedding) VALUES ($1, $2, $3, $4, $5, $6::vector)',
-            [opts.projectId, SOURCE_TYPE, path, chunks[c], hash, toVectorLiteral(vectors[c] as number[])]
+            [opts.projectId, SOURCE_TYPE, path, content, hash, toVectorLiteral(vector)]
           )
         }
       })
