@@ -21,8 +21,10 @@ export function chunkText(text: string, maxTokens = 400, overlap = 50): string[]
       const overlapSentences: string[] = []
       let overlapTokens = 0
       for (let i = current.length - 1; i >= 0 && overlapTokens < overlap; i--) {
-        overlapTokens += estimateTokens(current[i])
-        overlapSentences.unshift(current[i])
+        const item = current[i]
+        if (item === undefined) continue
+        overlapTokens += estimateTokens(item)
+        overlapSentences.unshift(item)
       }
       current = overlapSentences
       currentTokens = overlapTokens
@@ -45,7 +47,11 @@ export async function embedText(chunks: string[]): Promise<number[][]> {
   for (let i = 0; i < chunks.length; i += BATCH_SIZE) {
     const batch = chunks.slice(i, i + BATCH_SIZE)
     const response = await client.embed({ input: batch, model: EMBED_MODEL })
-    embeddings.push(...response.data.map(d => d.embedding))
+    if (!response.data) throw new Error('No data returned from Voyage AI')
+    embeddings.push(...response.data.map(d => {
+      if (!d.embedding) throw new Error('Missing embedding in Voyage AI response')
+      return d.embedding
+    }))
   }
 
   return embeddings
