@@ -10,6 +10,19 @@ import { setupWorkspace } from './setupWorkspace.js';
 import { AGENT_TOOLS, executeTool } from '../tools.js';
 import type { DevAgentOutput, IssueContext, WorkspaceContext } from '../types.js';
 import { slugify } from '../utils.js';
+import {
+  DEV_AGENT_PLAN_SYSTEM,
+  DEV_AGENT_CRITIQUE_SYSTEM,
+  DEV_AGENT_MR_DESC_SYSTEM,
+  buildDevAgentImplementSystem,
+  buildDevAgentFixErrorsSystem,
+  buildDevAgentPlanMessage,
+  buildDevAgentCritiqueMessage,
+  buildDevAgentReviseMessage,
+  buildDevAgentImplementMessage,
+  buildDevAgentFixErrorsMessage,
+  buildDevAgentMrDescMessage,
+} from '../prompts/dev-agent.js';
 
 function execFileAsync(
   file: string,
@@ -140,37 +153,14 @@ async function generatePlan(issue: IssueContext, workDir: string, auditCtx?: Aud
     system: [
       {
         type: 'text',
-        text: `You are a senior software engineer implementing a user story. Your task is to produce a concrete, ordered implementation plan. Do NOT write any code yet.
-
-Output a numbered list of actions. For each action specify:
-- The file to create or modify (relative path)
-- Exactly what to change or add
-- Any prerequisite step
-
-Be specific: mention function names, interfaces, import paths.`,
+        text: DEV_AGENT_PLAN_SYSTEM,
         cache_control: { type: 'ephemeral' },
       },
     ],
     messages: [
       {
         role: 'user',
-        content: `## User Story
-
-**Title**: ${issue.title}
-
-**Description**:
-${issue.description}
-
-**Acceptance Criteria**:
-${issue.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
-
-## Codebase (TypeScript files)
-
-\`\`\`
-${dirListing}
-\`\`\`
-
-Produce a detailed implementation plan.`,
+        content: buildDevAgentPlanMessage(issue.title, issue.description, issue.acceptanceCriteria, dirListing),
       },
     ],
   });
@@ -206,37 +196,14 @@ async function critiquePlan(issue: IssueContext, plan: string, auditCtx?: AuditC
     system: [
       {
         type: 'text',
-        text: `You are a senior code reviewer. Analyze the implementation plan against the acceptance criteria and classify each issue.
-
-Respond ONLY with a JSON object (no markdown fences) in this exact format:
-{
-  "grave": ["<issue description>"],
-  "moderate": ["<issue description>"],
-  "esthetic": ["<issue description>"]
-}
-
-Classification:
-- grave: missing acceptance criterion, wrong architecture, security issue → must be fixed
-- moderate: acceptable technical debt → create backlog item
-- esthetic: naming, formatting, minor organization → can live with it`,
+        text: DEV_AGENT_CRITIQUE_SYSTEM,
         cache_control: { type: 'ephemeral' },
       },
     ],
     messages: [
       {
         role: 'user',
-        content: `## User Story
-
-**Title**: ${issue.title}
-
-**Acceptance Criteria**:
-${issue.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
-
-## Implementation Plan
-
-${plan}
-
-Classify all issues with the plan.`,
+        content: buildDevAgentCritiqueMessage(issue.title, issue.acceptanceCriteria, plan),
       },
     ],
   });
@@ -345,17 +312,7 @@ async function revisePlan(
     messages: [
       {
         role: 'user',
-        content: `Revise the following implementation plan to fix the GRAVE issues listed below. Keep all other steps intact.
-
-## Original Plan
-
-${plan}
-
-## GRAVE Issues to Fix
-
-${critique.grave.map((g, i) => `${i + 1}. ${g}`).join('\n')}
-
-Output the revised plan only.`,
+        content: buildDevAgentReviseMessage(plan, critique.grave),
       },
     ],
   });
@@ -390,25 +347,14 @@ async function implementPlan(
 
   const systemPrompt: Anthropic.TextBlockParam = {
     type: 'text',
-    text: `You are a software engineer implementing a user story. You have access to the workspace filesystem via tools.
-Execute the implementation plan step by step. When done, stop calling tools and end your response.
-Workspace root: ${workDir}
-All file paths are relative to the workspace root.`,
+    text: buildDevAgentImplementSystem(workDir),
     cache_control: { type: 'ephemeral' },
   };
 
   const messages: Anthropic.MessageParam[] = [
     {
       role: 'user',
-      content: `Implement the following plan for user story: ${issue.title}
-
-## Acceptance Criteria
-${issue.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
-
-## Implementation Plan
-${revisedPlan}
-
-Start implementing now.`,
+      content: buildDevAgentImplementMessage(issue.title, issue.acceptanceCriteria, revisedPlan),
     },
   ];
 
@@ -421,22 +367,14 @@ async function fixErrors(errors: string, issue: IssueContext, workDir: string): 
 
   const systemPrompt: Anthropic.TextBlockParam = {
     type: 'text',
-    text: `You are a software engineer fixing TypeScript and lint errors. Use the filesystem tools to read and fix the files with errors.
-Workspace root: ${workDir}`,
+    text: buildDevAgentFixErrorsSystem(workDir),
     cache_control: { type: 'ephemeral' },
   };
 
   const messages: Anthropic.MessageParam[] = [
     {
       role: 'user',
-      content: `Fix the following TypeScript/lint errors in the workspace for user story: ${issue.title}
-
-## Errors
-\`\`\`
-${errors}
-\`\`\`
-
-Read the relevant files and fix all errors.`,
+      content: buildDevAgentFixErrorsMessage(issue.title, errors),
     },
   ];
 
@@ -523,30 +461,14 @@ async function generateMrDescription(
     system: [
       {
         type: 'text',
-        text: 'You are a software engineer writing a Merge Request description. Be concise and informative.',
+        text: DEV_AGENT_MR_DESC_SYSTEM,
         cache_control: { type: 'ephemeral' },
       },
     ],
     messages: [
       {
         role: 'user',
-        content: `Write a Merge Request description for the following user story implementation.
-
-The description MUST start with "Closes #${issueIid}" on the first line.
-Then include:
-- A short summary (2-4 sentences) of what was implemented
-- Key implementation choices and their justification
-
-## User Story
-**Title**: ${issue.title}
-
-**Acceptance Criteria**:
-${issue.acceptanceCriteria.map((c, i) => `${i + 1}. ${c}`).join('\n')}
-
-## Implementation Plan
-${revisedPlan}
-
-Output the MR description only, in Markdown format.`,
+        content: buildDevAgentMrDescMessage(issueIid, issue.title, issue.acceptanceCriteria, revisedPlan),
       },
     ],
   });

@@ -1,6 +1,7 @@
 import { activityInfo, log } from '@temporalio/activity';
 import Anthropic from '@anthropic-ai/sdk';
 import { callMcpTool, createAnthropicClient, auditLog, metricLog, summarize, type AuditContext } from '@factory/worker-shared';
+import { FIX_AGENT_SYSTEM, APPLY_FIX_TOOL, buildFixAgentMessage } from '../prompts/fix-agent.js';
 
 export interface FixCodeInput {
   issueIid: number;
@@ -115,20 +116,6 @@ function findFileDiff(diff: MrFileChange[], filePath: string): string {
   return change?.diff ?? '';
 }
 
-const FIX_SYSTEM_PROMPT = `You are a code correction agent. Given a file, the diff that introduced it, and a blocking review comment, produce a corrected version of the file that resolves exactly that issue. Make minimal, targeted changes. Call apply_fix with the complete corrected file content.`;
-
-const APPLY_FIX_TOOL: Anthropic.Tool = {
-  name: 'apply_fix',
-  description: 'Submit the corrected file content',
-  input_schema: {
-    type: 'object',
-    properties: {
-      fixed_content: { type: 'string', description: 'Complete corrected file content' },
-    },
-    required: ['fixed_content'],
-  },
-};
-
 async function generateFix(
   client: Anthropic,
   model: string,
@@ -145,21 +132,13 @@ async function generateFix(
   const response = await client.messages.create({
     model,
     max_tokens: 4096,
-    system: [{ type: 'text', text: FIX_SYSTEM_PROMPT, cache_control: { type: 'ephemeral' } }],
+    system: [{ type: 'text', text: FIX_AGENT_SYSTEM, cache_control: { type: 'ephemeral' } }],
     tools: [APPLY_FIX_TOOL],
     tool_choice: { type: 'tool', name: 'apply_fix' },
     messages: [
       {
         role: 'user',
-        content: `## File: ${filePath}
-
-### Current content
-\`\`\`
-${fileContent}
-\`\`\`${diffSection}
-
-### Blocking review comment${lineRef}
-${feedback.message}`,
+        content: buildFixAgentMessage(filePath, fileContent, diffSection, lineRef, feedback.message),
       },
     ],
   });

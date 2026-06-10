@@ -4,6 +4,11 @@ import {
   callMcpTool as sharedCallMcpTool, auditLog, metricLog, summarize,
   type ReviewComment, type ReviewAgentOutput, type AuditContext,
 } from '@factory/worker-shared';
+import {
+  REVIEW_AGENT_SYSTEM,
+  SUBMIT_REVIEW_TOOL,
+  buildReviewAgentMessage,
+} from '../prompts/review-agent.js';
 
 export interface ReviewCodeInput {
   mrIid: number;
@@ -240,56 +245,12 @@ function formatDiff(diff: MrFileChange[]): string {
     .join('\n\n');
 }
 
-const REVIEW_SYSTEM_PROMPT = `You are a senior code reviewer. Analyze the MR diff and produce a structured review.
-
-Classify each finding as:
-- bloquant: mandatory fix before merge — correctness bugs, security vulnerabilities (OWASP Top 10), breaking changes, data loss risks
-- modéré: important improvement, deferrable — code quality debt, missing error handling, minor security concerns
-- esthétique: style/convention only — naming, formatting, non-functional organization. No automatic action will be taken.
-
-Review criteria:
-1. Code quality: correctness, error handling, edge cases, performance
-2. Readability: naming clarity, function size, cognitive complexity
-3. Security (OWASP): injection, broken auth, sensitive data exposure, XSS, CSRF, insecure deserialization, vulnerable components
-4. Codebase consistency: existing patterns, naming conventions, architectural style
-
-Only report genuine issues. Call submit_review with all findings (empty array if none).`;
-
-const SUBMIT_REVIEW_TOOL: Anthropic.Tool = {
-  name: 'submit_review',
-  description: 'Submit the complete structured code review result',
-  input_schema: {
-    type: 'object',
-    properties: {
-      comments: {
-        type: 'array',
-        items: {
-          type: 'object',
-          properties: {
-            file:           { type: 'string', description: 'File path relative to repository root' },
-            line:           { type: ['integer', 'null'], description: 'Line number in the new version, or null for file-level comments' },
-            description:    { type: 'string', description: 'Description of the issue found' },
-            classification: {
-              type: 'string',
-              enum: ['bloquant', 'modéré', 'esthétique'],
-              description: 'Severity classification',
-            },
-          },
-          required: ['file', 'line', 'description', 'classification'],
-        },
-      },
-    },
-    required: ['comments'],
-  },
-};
-
 async function analyzeWithClaude(
   client: Anthropic,
   model: string,
   mrContext: MrContext,
 ): Promise<ReviewComment[]> {
   const formattedDiff = formatDiff(mrContext.diff);
-  const descriptionSection = mrContext.description ? `\n\nDescription: ${mrContext.description}` : '';
 
   const response = await client.messages.create({
     model,
@@ -297,7 +258,7 @@ async function analyzeWithClaude(
     system: [
       {
         type: 'text',
-        text: REVIEW_SYSTEM_PROMPT,
+        text: REVIEW_AGENT_SYSTEM,
         cache_control: { type: 'ephemeral' },
       },
     ],
@@ -306,11 +267,7 @@ async function analyzeWithClaude(
     messages: [
       {
         role: 'user',
-        content: `## MR: ${mrContext.title}${descriptionSection}
-
-## Diff
-
-${formattedDiff}`,
+        content: buildReviewAgentMessage(mrContext.title, mrContext.description, formattedDiff),
       },
     ],
   });
