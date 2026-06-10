@@ -2,20 +2,21 @@
 
 Pipeline de développement automatisé : de la qualification du besoin au merge, orchestré par des agents Claude.
 
-```
-Besoin utilisateur → Chat UI → GitLab (épopées / issues)
-                                       ↓
-                              Temporal (pipeline-worker)
-                                       ↓
-                         ┌─────────────────────────────┐
-                         │  agent-worker               │
-                         │  ├─ Dev agent               │
-                         │  ├─ Review agent            │
-                         │  ├─ Review-fix agent        │
-                         │  └─ Static-analysis agent   │
-                         └─────────────────────────────┘
-                                       ↓
-                                SonarQube → Merge MR
+```mermaid
+flowchart LR
+    User([Besoin utilisateur]) --> Chat[Chat UI]
+    Chat --> GitLab[GitLab\nÉpopées / Issues]
+    GitLab --> PW[pipeline-worker\nTemporal]
+
+    PW --> Dev[Dev agent]
+    PW --> Review[Review agent]
+    PW --> Fix[Review-fix agent]
+    PW --> SA[Static-analysis agent]
+
+    Dev & Review & Fix & SA --> AW[[agent-worker]]
+
+    AW --> SQ[SonarQube]
+    SQ --> Merge([Merge MR])
 ```
 
 ## Prérequis
