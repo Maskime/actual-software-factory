@@ -3,10 +3,19 @@
 Pipeline de développement automatisé : de la qualification du besoin au merge, orchestré par des agents Claude.
 
 ```
-Besoin utilisateur → GitLab (issues) → Temporal → Agent dev → Agent review
-                                                             → Agent fix review
-                                                             → SonarQube → Agent fix static
-                                                                         → Merge
+Besoin utilisateur → Chat UI → GitLab (épopées / issues)
+                                       ↓
+                              Temporal (pipeline-worker)
+                                       ↓
+                         ┌─────────────────────────────┐
+                         │  agent-worker               │
+                         │  ├─ Dev agent               │
+                         │  ├─ Review agent            │
+                         │  ├─ Review-fix agent        │
+                         │  └─ Static-analysis agent   │
+                         └─────────────────────────────┘
+                                       ↓
+                                SonarQube → Merge MR
 ```
 
 ## Prérequis
@@ -40,16 +49,29 @@ SONARQUBE_TEST_PROJECT_KEY=factory-test
 TEMPORAL_EXTERNAL_URL=http://localhost:8080
 TEMPORAL_DB_PASSWORD=ton_mot_de_passe_db_temporal
 
+# Factory DB — PostgreSQL 16 + pgvector (RAG)
+FACTORY_DB_PASSWORD=ton_mot_de_passe_factory_db
+
 # Secrets transversaux (requis dès EPIC-02 — agents LLM)
 ANTHROPIC_API_KEY=sk-ant-...
 GITLAB_API_TOKEN=glpat-...
 SONARQUBE_AGENT_TOKEN=squ_...
 GITLAB_WEBHOOK_SECRET=$(openssl rand -hex 32)
 
+# Voyage AI — génération d'embeddings (RAG)
+VOYAGE_API_KEY=pa-...
+
+# Alerting (optionnel) — URL webhook notifiée lors d'un pipeline bloqué
+ALERT_WEBHOOK_URL=
+PIPELINE_TIMEOUT_MINUTES=60
+
 # Observabilité — Grafana UI sur http://localhost:3100
 GRAFANA_PORT=3100
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=ton_mot_de_passe_grafana
+
+# PlantUML — serveur de diagrammes sur http://localhost:8081
+PLANTUML_PORT=8081
 ```
 
 > **Sécurité :** `infrastructure/.env` est gitignored — ne jamais le commiter. Toutes les clés attendues sont documentées sans valeur dans `infrastructure/.env.example`.
@@ -253,6 +275,8 @@ cp apps/.env.example apps/.env
 | `NUXT_GITLAB_CLIENT_SECRET` | ✅ | Secret de l'application OAuth GitLab |
 | `NUXT_GITLAB_URL` | Non | URL **publique** de GitLab — utilisée pour la redirection OAuth dans le navigateur (défaut : `http://localhost`) |
 | `NUXT_GITLAB_INTERNAL_URL` | Non | URL **interne** de GitLab — utilisée côté serveur pour l'échange de code et les appels userinfo. En Docker : `http://gitlab`. Si absent, hérite de `NUXT_GITLAB_URL`. |
+| `NUXT_MCP_GITLAB_URL` | Non | URL du serveur MCP GitLab — utilisée par l'endpoint `/api/submit` pour créer les épopées. Défaut : `http://localhost:3001`. En Docker : `http://mcp-gitlab:3000`. |
+| `NUXT_GITLAB_PROJECT_ID` | Non | ID du projet GitLab cible pour la création des épopées. Si absent, l'ID est transmis par le client via la requête. |
 
 > **Sécurité :** `apps/.env` est gitignored. Les clés `NUXT_ANTHROPIC_API_KEY`, `NEXTAUTH_SECRET` et les credentials GitLab OAuth ne sont jamais transmis au navigateur — ils sont lus exclusivement côté serveur.
 
@@ -327,6 +351,8 @@ docker compose -f infrastructure/docker-compose.yml up -d chat
 | MCP GitLab | http://localhost:3001/mcp | token via `GITLAB_API_TOKEN` |
 | MCP SonarQube | http://localhost:3002/mcp | token via `SONARQUBE_AGENT_TOKEN` |
 | MCP Temporal | http://localhost:3003/mcp | — (réseau interne) |
+| Factory DB | interne (`factory-db:5432`) | — (pas exposé sur l'hôte) |
+| PlantUML | http://localhost:${PLANTUML_PORT:-8081} | — |
 
 ### Architecture MCP
 
@@ -348,6 +374,30 @@ Configuration Claude Code (`.mcp.json` à la racine du projet) :
     "temporal":  { "type": "http", "url": "http://localhost:3003/mcp" }
   }
 }
+```
+
+## Workers Temporal
+
+Les workers Temporal tournent en containers persistants et consomment les tâches de la queue `factory-*`. Ils sont démarrés automatiquement avec `docker compose up -d`.
+
+| Container | Package | Rôle |
+|---|---|---|
+| `pipeline-worker` | `@factory/worker-pipeline` | Orchestre le workflow complet dev→merge ; émet les signaux inter-étapes |
+| `agent-worker` | `@factory/worker-agents` | Container partagé pour les agents EPIC-05 à EPIC-09 (dev, review, fix, static) |
+| `review-worker` | `@factory/worker-review` | Agent de revue de code (EPIC-06) |
+| `review-fix-worker` | `@factory/worker-review-fix` | Agent de correction post-review (EPIC-07) |
+| `static-analysis-worker` | `@factory/worker-static-analysis` | Agent d'analyse statique SonarQube + merge final (EPIC-09) |
+
+Les workers ne sont pas exposés sur l'hôte — ils communiquent uniquement via le serveur Temporal (`temporal:7233`) sur `factory-network`.
+
+**Développement local (sans Docker) :**
+
+```bash
+# Dans workers/agents/ — créer .env depuis .env.example et renseigner ANTHROPIC_API_KEY
+cp workers/agents/.env.example workers/agents/.env
+
+# Lancer un worker en mode dev (hot-reload via tsx)
+npm run dev --workspace=@factory/worker-agents
 ```
 
 ## Tests MCP (round-trip)
