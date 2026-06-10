@@ -1,9 +1,8 @@
-import { createHash } from 'node:crypto'
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
-import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
 import { createConsola } from 'consola'
 import { chunkText, embedText } from '../embedding'
 import { query, withClient } from '../db'
+import { parseToolResult, connectGitlab, hashContent, toVectorLiteral } from './shared'
 
 const logger = createConsola({ level: 4 }).withTag('indexer')
 
@@ -49,24 +48,6 @@ export function isExcludedDir(path: string): boolean {
 export function isIndexable(path: string): boolean {
   if (isExcludedDir(path)) return false
   return INDEXABLE_EXTENSIONS.some(ext => path.endsWith(ext))
-}
-
-export function hashContent(content: string): string {
-  return createHash('sha256').update(content).digest('hex')
-}
-
-function parseToolResult<T>(result: Awaited<ReturnType<Client['callTool']>>): T {
-  const content = result.content as Array<{ type: string; text: string }>
-  if (result.isError) {
-    throw new Error(content[0]?.text ?? 'Erreur MCP inconnue')
-  }
-  return JSON.parse(content[0]?.text ?? 'null') as T
-}
-
-function connectGitlab(mcpUrl: string): Promise<Client> {
-  const client = new Client({ name: 'portal-indexer', version: '1.0' })
-  const transport = new StreamableHTTPClientTransport(new URL(`${mcpUrl}/mcp`))
-  return client.connect(transport).then(() => client)
 }
 
 async function resolveRef(client: Client, projectId: string): Promise<string> {
@@ -117,10 +98,6 @@ async function readFileContent(
   })
   const parsed = parseToolResult<GitlabFile>(fileResult)
   return parsed?.content ?? ''
-}
-
-function toVectorLiteral(vector: number[]): string {
-  return `[${vector.join(',')}]`
 }
 
 /**
