@@ -34,6 +34,35 @@ describe('ChatMessage', () => {
     expect(w.html()).not.toContain('<script>')
   })
 
+  // ── Streaming mode ──────────────────────────────────────────
+  it('renders assistant content as raw text while streaming (no Markdown parse)', () => {
+    const w = mount(ChatMessage, { props: { role: 'assistant', content: '**bold**', streaming: true } })
+    expect(w.find('.asst-text--streaming').exists()).toBe(true)
+    expect(w.text()).toContain('**bold**')
+    expect(w.html()).not.toContain('<strong>')
+  })
+
+  it('renders Markdown when streaming=false (default behaviour preserved)', () => {
+    const w = mount(ChatMessage, { props: { role: 'assistant', content: '**bold**', streaming: false } })
+    expect(w.find('.asst-text--streaming').exists()).toBe(false)
+    expect(w.html()).toContain('<strong>bold</strong>')
+  })
+
+  it('switches from raw text to Markdown when streaming turns false', async () => {
+    const w = mount(ChatMessage, { props: { role: 'assistant', content: '**bold**', streaming: true } })
+    expect(w.html()).not.toContain('<strong>')
+    await w.setProps({ streaming: false })
+    expect(w.find('.asst-text--streaming').exists()).toBe(false)
+    expect(w.html()).toContain('<strong>bold</strong>')
+  })
+
+  it('never shows submit button while streaming, even with showSubmit and tag', () => {
+    const w = mount(ChatMessage, {
+      props: { role: 'assistant', content: 'hello [FOR_VALIDATION]', showSubmit: true, streaming: true },
+    })
+    expect(w.find('.msg-submit-btn').exists()).toBe(false)
+  })
+
   // [FOR_VALIDATION] tag behaviour
   it('does not show submit button without showSubmit prop', () => {
     const w = mount(ChatMessage, { props: { role: 'assistant', content: 'hello [FOR_VALIDATION]' } })

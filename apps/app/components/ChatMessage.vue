@@ -9,7 +9,8 @@ const props = withDefaults(defineProps<{
   content: string
   showSubmit?: boolean
   isSubmitting?: boolean
-}>(), { showSubmit: false, isSubmitting: false })
+  streaming?: boolean
+}>(), { showSubmit: false, isSubmitting: false, streaming: false })
 
 const emit = defineEmits<{ submit: [] }>()
 
@@ -22,7 +23,7 @@ const md = new Marked({
 const hasValidationTag = computed(() => props.content.includes(FOR_VALIDATION_TAG))
 const cleanContent = computed(() => props.content.replace(FOR_VALIDATION_TAG, '').trimEnd())
 const renderedContent = computed(() => md.parse(cleanContent.value) as string)
-const showButton = computed(() => props.role === 'assistant' && props.showSubmit && hasValidationTag.value)
+const showButton = computed(() => props.role === 'assistant' && props.showSubmit && hasValidationTag.value && !props.streaming)
 </script>
 
 <template>
@@ -46,7 +47,10 @@ const showButton = computed(() => props.role === 'assistant' && props.showSubmit
         </button>
       </div>
 
-      <div class="asst-text" v-html="renderedContent" />
+      <!-- During streaming: plain text (pre-wrap), avoids parsing partial Markdown.
+           Once the stream ends, render the final, stable Markdown. -->
+      <div v-if="streaming" class="asst-text asst-text--streaming">{{ cleanContent }}</div>
+      <div v-else class="asst-text" v-html="renderedContent" />
 
       <div v-if="showButton" class="msg-submit-row">
         <button class="msg-submit-btn" :disabled="isSubmitting" @click="emit('submit')">
@@ -129,6 +133,11 @@ const showButton = computed(() => props.role === 'assistant' && props.showSubmit
   line-height: 1.75;
   font-family: var(--sans);
   font-weight: 300;
+}
+
+/* Streaming: raw text, preserve line breaks until the final Markdown render */
+.asst-text--streaming {
+  white-space: pre-wrap;
 }
 
 /* ── Markdown prose styles (rendered via v-html) ─────────── */
