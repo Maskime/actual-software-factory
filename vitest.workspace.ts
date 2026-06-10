@@ -4,6 +4,7 @@ export default defineWorkspace([
   'mcp/gitlab/vitest.config.ts',
   'mcp/temporal/vitest.config.ts',
   'workers/pipeline/vitest.config.ts',
+  'tools/eval/vitest.config.ts',
   'workers/agents/vitest.config.ts',
   'workers/review-worker/vitest.config.ts',
   'workers/review-fix-worker/vitest.config.ts',

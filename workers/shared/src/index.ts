@@ -1,4 +1,7 @@
 import { createServer, type Server } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { ApplicationFailure } from '@temporalio/activity';
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import Anthropic from '@anthropic-ai/sdk';
@@ -101,6 +104,13 @@ export function createAnthropicClient(): Anthropic {
     throw ApplicationFailure.nonRetryable('ANTHROPIC_API_KEY is not set', 'MissingConfigError');
   }
   return new Anthropic({ apiKey });
+}
+
+export function loadPrompt(name: string): string {
+  const dir = process.env.PROMPTS_DIR
+    ? resolve(process.cwd(), process.env.PROMPTS_DIR)
+    : resolve(dirname(fileURLToPath(import.meta.url)), '../../prompts');
+  return readFileSync(join(dir, `${name}.md`), 'utf-8');
 }
 
 export interface ReviewComment {

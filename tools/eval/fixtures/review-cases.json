@@ -1,0 +1,4 @@
+[
+  { "mrIid": 40, "projectId": 3, "description": "Setup du container worker — MR mergée connue" },
+  { "mrIid": 42, "projectId": 3, "description": "Génération du code — MR mergée connue" }
+]
