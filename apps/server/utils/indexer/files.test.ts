@@ -165,7 +165,7 @@ describe('indexRepositoryFiles', () => {
       tree: { __root__: [{ type: 'blob', path: 'a.ts' }] },
       files: { 'a.ts': 'stable content' },
     })
-    const { hashContent } = await import('./files')
+    const { hashContent } = await import('./shared')
     const sameHash = hashContent('stable content')
     mockQuery.mockImplementation((sql: string) => {
       if (sql.startsWith('SELECT')) return Promise.resolve({ rows: [{ content_hash: sameHash }], rowCount: 1 })
