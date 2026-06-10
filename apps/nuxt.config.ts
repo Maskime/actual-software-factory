@@ -27,5 +27,6 @@ export default defineNuxtConfig({
     anthropicSystemPrompt: '',
     mcpGitlabUrl: 'http://localhost:3001',
     gitlabProjectId: '',
+    databaseUrl: '',
   },
 })

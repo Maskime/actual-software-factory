@@ -514,6 +514,8 @@ services:
     environment:
       NUXT_PORT: "3000"
       NUXT_GITLAB_INTERNAL_URL: "http://gitlab"
+      NUXT_MCP_GITLAB_URL: "http://mcp-gitlab:3000"
+      NUXT_DATABASE_URL: "postgres://factory:${FACTORY_DB_PASSWORD}@factory-db:5432/factory"
     ports:
       - "${NUXT_PORT:-3000}:3000"
     networks:
