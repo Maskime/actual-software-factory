@@ -104,7 +104,7 @@ build-sonar:
       - sonar-scanner/
   script:
     - sonar-scanner -Dsonar.host.url="${SONAR_HOST_URL}"
-  allow_failure: true
+  allow_failure: false
   rules:
     - if: $CI_PIPELINE_SOURCE == 'merge_request_event'
       changes: *source_paths
