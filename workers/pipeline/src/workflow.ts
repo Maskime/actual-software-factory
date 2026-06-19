@@ -6,11 +6,13 @@ import { defineSearchAttributeKey } from '@temporalio/common';
 import type * as gitlab from './activities/gitlab.js';
 import type * as agents from './activities/agents.js';
 import type * as reviewActivities from './activities/reviewAgent.js';
+import type * as reviewFixActivities from './activities/reviewFixAgent.js';
 import type * as staticAnalysisActivities from './activities/staticAnalysisAgent.js';
 import type { PipelineInput, SonarqubeScanResult, ReviewFixResult } from './types.js';
 import { WORKFLOW_LABELS, PIPELINE_STAGE } from './types.js';
 import {
   gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions,
+  reviewFixActivityOptions,
   staticAnalysisActivityOptions,
   humanInTheLoopConfig, suspendNotificationConfig, sonarqubeCiTimeoutConfig,
 } from './config.js';
@@ -19,10 +21,11 @@ const { applyWorkflowLabel, closeIssue, addIssueComment, logStageMetric } = prox
   gitlabActivityOptions()
 );
 
-const { runDevAgent, runFixReviewAgent } =
-  proxyActivities<typeof agents>(agentActivityOptions());
+const { runDevAgent } = proxyActivities<typeof agents>(agentActivityOptions());
 
 const { reviewCode } = proxyActivities<typeof reviewActivities>(reviewAgentActivityOptions());
+
+const { runFixReviewAgent } = proxyActivities<typeof reviewFixActivities>(reviewFixActivityOptions());
 
 const { runStaticAnalysisAgent, runFixStaticAgent, runVerifyAndMergeAgent } =
   proxyActivities<typeof staticAnalysisActivities>(staticAnalysisActivityOptions());
@@ -169,7 +172,9 @@ export async function pipelineWorkflow(input: PipelineInput): Promise<void> {
     upsertSearchAttributes([{ key: stageKey, value: PIPELINE_STAGE.fix }]);
     await applyLabel(L.fix, L.review);
     log.info('Starting fix-review agent', { issueIid: iid, bloquant: reviewOutput.bloquant });
-    await withSuspendOnFailure(ctx, 'fix', PIPELINE_STAGE.fix, () => runFixReviewAgent(input));
+    await withSuspendOnFailure(ctx, 'fix', PIPELINE_STAGE.fix, () =>
+      runFixReviewAgent({ ...input, mrIid: devOutput.mrIid, branchName: devOutput.branchName })
+    );
 
     if (reviewFixResult?.status === 'partial') {
       log.warn('Partial fix — suspending for human intervention', {

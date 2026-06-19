@@ -26,6 +26,10 @@ vi.mock('./activities/createBacklogIssues.js', () => ({
   createBacklogIssues: vi.fn(),
 }));
 
+vi.mock('./activities/runFixReviewAgent.js', () => ({
+  runFixReviewAgent: vi.fn(),
+}));
+
 import { startWorker } from './worker.js';
 
 describe('startWorker', () => {
@@ -83,6 +87,16 @@ describe('startWorker', () => {
     expect(mockCreate).toHaveBeenCalledWith(
       expect.objectContaining({
         activities: expect.objectContaining({ createBacklogIssues: expect.any(Function) }),
+      })
+    );
+  });
+
+  it('passes runFixReviewAgent activity to Worker.create', async () => {
+    await startWorker({});
+
+    expect(mockCreate).toHaveBeenCalledWith(
+      expect.objectContaining({
+        activities: expect.objectContaining({ runFixReviewAgent: expect.any(Function) }),
       })
     );
   });
