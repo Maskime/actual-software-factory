@@ -64,6 +64,22 @@ export function reviewAgentActivityOptions(): ActivityOptions {
   };
 }
 
+export function reviewFixActivityOptions(): ActivityOptions {
+  // maximumAttempts:1 — pas de retry auto : fixCode re-fetcherait les commentaires
+  // [BLOQUANT] toujours présents → re-commits + double signal. Un échec est rattrapé
+  // par withSuspendOnFailure du workflow.
+  // heartbeatTimeout OMIS — fixCode est une boucle LLM longue sans heartbeat ; sinon
+  // Temporal la tue à 2 min → double exécution.
+  return {
+    taskQueue:              process.env.REVIEW_FIX_TASK_QUEUE                     ?? 'review-fix-queue',
+    scheduleToCloseTimeout: process.env.AGENT_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT  ?? '4 hours',
+    startToCloseTimeout:    process.env.AGENT_ACTIVITY_START_TO_CLOSE_TIMEOUT     ?? '60 minutes',
+    retry: {
+      maximumAttempts: 1,
+    },
+  };
+}
+
 export function humanInTheLoopConfig(): { enabled: boolean; timeout: Duration } {
   return {
     enabled: process.env.HUMAN_IN_THE_LOOP === 'true',

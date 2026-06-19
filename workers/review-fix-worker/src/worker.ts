@@ -2,6 +2,7 @@ import { Worker, NativeConnection } from '@temporalio/worker';
 import { createHealthServer } from '@factory/worker-shared';
 import * as fixCodeActivities from './activities/fixCode.js';
 import * as createBacklogIssuesActivities from './activities/createBacklogIssues.js';
+import * as runFixReviewAgentActivities from './activities/runFixReviewAgent.js';
 
 export async function startWorker(env: Record<string, string | undefined> = process.env): Promise<void> {
   const taskQueue  = env.TEMPORAL_TASK_QUEUE ?? 'review-fix-queue';
@@ -16,7 +17,7 @@ export async function startWorker(env: Record<string, string | undefined> = proc
     connection,
     namespace,
     taskQueue,
-    activities: { ...fixCodeActivities, ...createBacklogIssuesActivities },
+    activities: { ...fixCodeActivities, ...createBacklogIssuesActivities, ...runFixReviewAgentActivities },
   });
 
   process.on('SIGTERM', () => { healthServer.close(); worker.shutdown(); });

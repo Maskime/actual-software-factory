@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest'
-import { gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions, staticAnalysisActivityOptions, humanInTheLoopConfig, suspendNotificationConfig, alertingConfig } from './config.js'
+import { gitlabActivityOptions, agentActivityOptions, reviewAgentActivityOptions, reviewFixActivityOptions, staticAnalysisActivityOptions, humanInTheLoopConfig, suspendNotificationConfig, alertingConfig } from './config.js'
 
 const GITLAB_KEYS = [
   'GITLAB_ACTIVITY_SCHEDULE_TO_CLOSE_TIMEOUT',
@@ -18,13 +18,14 @@ const AGENT_KEYS = [
 ] as const
 
 const REVIEW_KEYS         = ['REVIEW_AGENT_TASK_QUEUE'] as const
+const REVIEW_FIX_KEYS     = ['REVIEW_FIX_TASK_QUEUE'] as const
 const STATIC_ANALYSIS_KEYS = ['STATIC_ANALYSIS_TASK_QUEUE'] as const
 
 const HITL_KEYS    = ['HUMAN_IN_THE_LOOP', 'HUMAN_IN_THE_LOOP_TIMEOUT'] as const
 const SUSPEND_KEYS = ['SUSPEND_NOTIFICATION'] as const
 
 function clearEnv() {
-  for (const k of [...GITLAB_KEYS, ...AGENT_KEYS, ...REVIEW_KEYS, ...STATIC_ANALYSIS_KEYS, ...HITL_KEYS, ...SUSPEND_KEYS]) delete process.env[k]
+  for (const k of [...GITLAB_KEYS, ...AGENT_KEYS, ...REVIEW_KEYS, ...REVIEW_FIX_KEYS, ...STATIC_ANALYSIS_KEYS, ...HITL_KEYS, ...SUSPEND_KEYS]) delete process.env[k]
 }
 
 describe('gitlabActivityOptions', () => {
@@ -133,6 +134,36 @@ describe('reviewAgentActivityOptions', () => {
 
   it('includes EmptyDiffError in nonRetryableErrorTypes', () => {
     expect(reviewAgentActivityOptions().retry?.nonRetryableErrorTypes).toContain('EmptyDiffError')
+  })
+})
+
+describe('reviewFixActivityOptions', () => {
+  beforeEach(clearEnv)
+  afterEach(clearEnv)
+
+  it('dispatches to review-fix-queue task queue by default', () => {
+    expect(reviewFixActivityOptions().taskQueue).toBe('review-fix-queue')
+  })
+
+  it('overrides taskQueue via REVIEW_FIX_TASK_QUEUE env var', () => {
+    process.env.REVIEW_FIX_TASK_QUEUE = 'custom-review-fix-queue'
+    expect(reviewFixActivityOptions().taskQueue).toBe('custom-review-fix-queue')
+  })
+
+  it('returns default scheduleToCloseTimeout of 4 hours', () => {
+    expect(reviewFixActivityOptions().scheduleToCloseTimeout).toBe('4 hours')
+  })
+
+  it('returns default startToCloseTimeout of 60 minutes', () => {
+    expect(reviewFixActivityOptions().startToCloseTimeout).toBe('60 minutes')
+  })
+
+  it('sets maximumAttempts to 1 (no auto-retry — avoids double signal)', () => {
+    expect(reviewFixActivityOptions().retry?.maximumAttempts).toBe(1)
+  })
+
+  it('omits heartbeatTimeout (long LLM loop without heartbeat)', () => {
+    expect(reviewFixActivityOptions().heartbeatTimeout).toBeUndefined()
   })
 })
 
