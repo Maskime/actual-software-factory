@@ -52,10 +52,16 @@ vi.mock('#auth', () => ({
   getToken: vi.fn().mockResolvedValue(null),
 }))
 
+vi.mock('../utils/retrieval', () => ({
+  retrieveContext: vi.fn().mockResolvedValue([]),
+  formatContextBlock: vi.fn().mockReturnValue(null),
+}))
+
 import handler from './chat.post'
 import * as h3 from 'h3'
 import Anthropic from '@anthropic-ai/sdk'
 import * as auth from '#auth'
+import * as retrieval from '../utils/retrieval'
 import { QUALIFICATION_PROMPT } from '../prompts/qualification'
 
 describe('QUALIFICATION_PROMPT content', () => {
@@ -403,5 +409,81 @@ describe('chat.post — project context injection', () => {
     const readmeContent = callArg.system[1].text as string
     expect(readmeContent).not.toContain('x'.repeat(50_001))
     expect(readmeContent.length).toBeLessThanOrEqual(50_000 + 200) // +200 for context header/labels
+  })
+})
+
+describe('chat.post — RAG semantic context injection', () => {
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.stubGlobal('useRuntimeConfig', vi.fn().mockReturnValue(mockConfig))
+    // No README/CLAUDE.md so the only extra block comes from RAG
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 404 }))
+    vi.mocked(retrieval.retrieveContext).mockResolvedValue([])
+    vi.mocked(retrieval.formatContextBlock).mockReturnValue(null)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  function makeStreamSpy() {
+    const streamSpy = vi.fn().mockReturnValue({
+      [Symbol.asyncIterator]: async function* () {
+        yield { type: 'content_block_delta', delta: { type: 'text_delta', text: 'ok' } }
+      },
+    })
+    const MockAnthropic = Anthropic as unknown as ReturnType<typeof vi.fn>
+    MockAnthropic.mockImplementation(() => ({ messages: { stream: streamSpy } }))
+    return streamSpy
+  }
+
+  it('injects a RAG system block when chunks are retrieved', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'token-xyz' } as any)
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'where is FooBar?' }], projectId: 3 })
+    vi.mocked(retrieval.retrieveContext).mockResolvedValue([
+      { sourceType: 'code', sourcePath: 'app/FooBar.vue', content: 'FooBar component' },
+    ])
+    vi.mocked(retrieval.formatContextBlock).mockReturnValue(
+      '[Contexte projet — extraits pertinents]\n\n--- (code: app/FooBar.vue) ---\n\nFooBar component',
+    )
+
+    const streamSpy = makeStreamSpy()
+    vi.mocked(h3.sendStream).mockResolvedValue(undefined)
+
+    await (handler as Function)(mockEvent)
+
+    const callArg = streamSpy.mock.calls[0][0]
+    const ragBlock = (callArg.system as Array<{ text: string; cache_control?: unknown }>).find(b =>
+      b.text.includes('[Contexte projet — extraits pertinents]'),
+    )
+    expect(ragBlock).toBeDefined()
+    expect(ragBlock!.text).toContain('app/FooBar.vue')
+    // The RAG block must NOT carry cache_control
+    expect(ragBlock!.cache_control).toBeUndefined()
+  })
+
+  it('still responds (emits [DONE]) when retrieveContext throws', async () => {
+    vi.mocked(auth.getToken).mockResolvedValue({ accessToken: 'token-xyz' } as any)
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'hi' }], projectId: 3 })
+    vi.mocked(retrieval.retrieveContext).mockRejectedValue(new Error('voyage down'))
+
+    const chunks: string[] = []
+    vi.mocked(h3.sendStream).mockImplementation((_ev, stream: ReadableStream) => {
+      return drainStream(stream).then(c => { chunks.push(...c) }) as unknown as ReturnType<typeof h3.sendStream>
+    })
+
+    await expect((handler as Function)(mockEvent)).resolves.toBeUndefined()
+    expect(chunks).toContainEqual('data: [DONE]\n\n')
+  })
+
+  it('does not call retrieveContext when no projectId', async () => {
+    vi.mocked(h3.readBody).mockResolvedValue({ messages: [{ role: 'user', content: 'hi' }] })
+
+    makeStreamSpy()
+    vi.mocked(h3.sendStream).mockResolvedValue(undefined)
+
+    await (handler as Function)(mockEvent)
+
+    expect(retrieval.retrieveContext).not.toHaveBeenCalled()
   })
 })

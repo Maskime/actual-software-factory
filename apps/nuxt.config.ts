@@ -28,5 +28,6 @@ export default defineNuxtConfig({
     mcpGitlabUrl: 'http://localhost:3001',
     gitlabProjectId: '',
     databaseUrl: '',
+    ragTopN: 8,
   },
 })
