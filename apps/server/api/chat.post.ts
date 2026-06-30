@@ -2,6 +2,7 @@ import { defineEventHandler, readBody, setResponseHeader, sendStream, createErro
 import Anthropic from '@anthropic-ai/sdk'
 import { getToken } from '#auth'
 import { QUALIFICATION_PROMPT } from '../prompts/qualification'
+import { retrieveContext, formatContextBlock } from '../utils/retrieval'
 import type { EpicData } from '../../app/utils/sseParser'
 import { createConsola } from 'consola'
 
@@ -179,6 +180,27 @@ async function buildProjectContext(
   return parts.join('\n\n')
 }
 
+/**
+ * Builds the RAG context block from the last user message via semantic search in
+ * the local embeddings table. A retrieval failure must never break the chat.
+ */
+async function buildRetrievalContext(
+  projectId: number,
+  messages: ChatMessage[],
+  limit: number,
+): Promise<string | null> {
+  const text = messages.findLast(m => m.role === 'user')?.content
+  if (!text) return null
+
+  try {
+    const chunks = await retrieveContext(projectId, text, limit)
+    return formatContextBlock(chunks)
+  } catch (err) {
+    logger.error('RAG retrieval failed:', err)
+    return null
+  }
+}
+
 export default defineEventHandler(async (event) => {
   const body = await readBody<{ messages?: ChatMessage[]; projectId?: number }>(event)
   const config = useRuntimeConfig(event)
@@ -207,6 +229,15 @@ export default defineEventHandler(async (event) => {
     const projectContext = await buildProjectContext(event, body.projectId, config)
     if (projectContext) {
       systemBlocks.push({ type: 'text', text: projectContext })
+    }
+
+    const ragBlock = await buildRetrievalContext(
+      body.projectId,
+      body.messages,
+      Number(config.ragTopN) || 8,
+    )
+    if (ragBlock) {
+      systemBlocks.push({ type: 'text', text: ragBlock })
     }
   }
 
