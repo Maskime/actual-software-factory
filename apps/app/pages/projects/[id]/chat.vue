@@ -34,6 +34,33 @@ const submitResult = ref<SubmitResult | null>(null)
 const submitError = ref<string | null>(null)
 const epicData = ref<EpicData | null>(null)
 
+const isReindexing = ref(false)
+const reindexResult = ref<{ indexed: number; duration_ms: number } | null>(null)
+const reindexError = ref<string | null>(null)
+
+async function reindex() {
+  reindexError.value = null
+  reindexResult.value = null
+  isReindexing.value = true
+
+  try {
+    const res = await fetch('/api/index', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projectId }),
+    })
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}))
+      throw new Error(data?.message ?? `Erreur serveur : ${res.status}`)
+    }
+    reindexResult.value = await res.json()
+  } catch (e) {
+    reindexError.value = e instanceof Error ? e.message : 'Erreur de réindexation'
+  } finally {
+    isReindexing.value = false
+  }
+}
+
 async function submitNeed() {
   if (!epicData.value) return
 
@@ -139,6 +166,14 @@ async function sendMessage(text: string) {
             <span class="hdr-status-lbl">processing</span>
           </div>
           <NuxtLink :to="`/projects/${projectId}`" class="hdr-link">Dashboard</NuxtLink>
+          <button
+            class="hdr-reindex"
+            :disabled="isReindexing || isStreaming || isSubmitting"
+            @click="reindex"
+          >
+            <span v-if="isReindexing" class="hdr-reindex-spinner" aria-hidden="true" />
+            {{ isReindexing ? 'Indexation…' : 'Réindexer' }}
+          </button>
           <button class="hdr-signout" @click="signOut({ callbackUrl: '/login' })">Déconnexion</button>
         </div>
       </div>
@@ -154,14 +189,19 @@ async function sendMessage(text: string) {
       <ChatThread
         :messages="messages"
         :is-streaming="isStreaming"
-        :can-submit="!isStreaming && !isSubmitting && !submitResult"
+        :can-submit="!isStreaming && !isSubmitting && !submitResult && !isReindexing"
         :is-submitting="isSubmitting"
         @submit="submitNeed"
       />
     </div>
 
-    <div v-if="error || submitError" class="err-bar">
-      <span class="err-tag">erreur</span>{{ error || submitError }}
+    <div v-if="error || submitError || reindexError" class="err-bar">
+      <span class="err-tag">erreur</span>{{ error || submitError || reindexError }}
+    </div>
+
+    <div v-if="reindexResult" class="reindex-bar">
+      <span class="reindex-tag">indexé</span>
+      <span class="reindex-msg">{{ reindexResult.indexed }} chunks réindexés en {{ reindexResult.duration_ms }} ms</span>
     </div>
 
     <div v-if="submitResult" class="result-bar">
@@ -178,7 +218,7 @@ async function sendMessage(text: string) {
       </ul>
     </div>
 
-    <ChatInput :disabled="isStreaming || isSubmitting" @send="sendMessage" />
+    <ChatInput :disabled="isStreaming || isSubmitting || isReindexing" @send="sendMessage" />
   </div>
 </template>
 
@@ -300,6 +340,49 @@ async function sendMessage(text: string) {
   color: var(--hi);
   border-color: var(--hi);
   background: color-mix(in srgb, var(--hi) 8%, transparent);
+}
+
+.hdr-reindex {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  font-family: var(--mono);
+  font-size: 0.6875rem;
+  font-weight: 500;
+  color: var(--txt-2);
+  letter-spacing: 0.04em;
+  padding: 0.2rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  background: transparent;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s, background 0.15s;
+  line-height: 1;
+}
+
+.hdr-reindex:hover:not(:disabled) {
+  color: var(--hi);
+  border-color: var(--hi);
+  background: color-mix(in srgb, var(--hi) 8%, transparent);
+}
+
+.hdr-reindex:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.hdr-reindex-spinner {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--hi) 35%, transparent);
+  border-top-color: var(--hi);
+  animation: spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
 }
 
 .hdr-signout {
@@ -440,5 +523,37 @@ async function sendMessage(text: string) {
 .result-issues a:hover {
   color: var(--hi);
   text-decoration: underline;
+}
+
+/* ── Reindex bar ────────────────────────────────────────────── */
+
+.reindex-bar {
+  flex-shrink: 0;
+  margin: 0.375rem 1.5rem;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid color-mix(in srgb, var(--hi) 25%, transparent);
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--hi) 6%, var(--surface));
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+}
+
+.reindex-tag {
+  font-family: var(--mono);
+  font-size: 0.55rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  border: 1px solid color-mix(in srgb, var(--hi) 50%, transparent);
+  color: var(--hi);
+  padding: 0.1rem 0.35rem;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.reindex-msg {
+  font-family: var(--mono);
+  font-size: 0.75rem;
+  color: var(--txt-2);
 }
 </style>
