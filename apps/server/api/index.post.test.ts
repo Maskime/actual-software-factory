@@ -78,7 +78,8 @@ describe('index.post handler', () => {
 
     expect(mockIndexFiles).toHaveBeenCalledWith({ projectId: 3, mcpGitlabUrl: 'http://mcp:3000' })
     expect(mockIndexIssues).toHaveBeenCalledWith({ projectId: 3, mcpGitlabUrl: 'http://mcp:3000' })
-    expect(result).toEqual({ files: filesResult, issues: issuesResult })
+    expect(result.indexed).toBe(6)
+    expect(typeof result.duration_ms).toBe('number')
   })
 
   it('prefers config.gitlabProjectId over the body projectId', async () => {

@@ -221,3 +221,77 @@ describe('ProjectDashboard — [FOR_VALIDATION] submit button', () => {
     expect(w.find('.result-bar').exists()).toBe(true)
   })
 })
+
+describe('ProjectDashboard — Réindexer button', () => {
+  beforeEach(() => {
+    stubProjects()
+  })
+
+  it('calls /api/index with the projectId body on click', async () => {
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ indexed: 6, duration_ms: 42 }),
+    })
+    vi.stubGlobal('fetch', fetchMock)
+    const w = mountPage()
+    await flushPromises()
+
+    await w.find('.hdr-reindex').trigger('click')
+    await flushPromises()
+
+    expect(fetchMock).toHaveBeenCalledWith('/api/index', expect.objectContaining({
+      method: 'POST',
+      body: JSON.stringify({ projectId: 3 }),
+    }))
+  })
+
+  it('reflects the loading state while indexing (disabled button + spinner)', async () => {
+    let resolveFetch!: (v: unknown) => void
+    const pending = new Promise((resolve) => { resolveFetch = resolve })
+    vi.stubGlobal('fetch', vi.fn().mockReturnValue(pending))
+    const w = mountPage()
+    await flushPromises()
+
+    await w.find('.hdr-reindex').trigger('click')
+    await flushPromises()
+
+    expect(w.find('.hdr-reindex').attributes('disabled')).toBeDefined()
+    expect(w.find('.hdr-reindex-spinner').exists()).toBe(true)
+
+    resolveFetch({ ok: true, json: () => Promise.resolve({ indexed: 6, duration_ms: 42 }) })
+    await flushPromises()
+    expect(w.find('.hdr-reindex-spinner').exists()).toBe(false)
+  })
+
+  it('shows the confirmation bar with chunk count and duration on success', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: true,
+      json: () => Promise.resolve({ indexed: 6, duration_ms: 42 }),
+    }))
+    const w = mountPage()
+    await flushPromises()
+
+    await w.find('.hdr-reindex').trigger('click')
+    await flushPromises()
+
+    expect(w.find('.reindex-bar').exists()).toBe(true)
+    expect(w.find('.reindex-bar').text()).toContain('6')
+    expect(w.find('.reindex-bar').text()).toContain('42')
+  })
+
+  it('shows the error bar with the message on failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: () => Promise.resolve({ message: 'Erreur indexation : boom' }),
+    }))
+    const w = mountPage()
+    await flushPromises()
+
+    await w.find('.hdr-reindex').trigger('click')
+    await flushPromises()
+
+    expect(w.find('.err-bar').exists()).toBe(true)
+    expect(w.text()).toContain('Erreur indexation : boom')
+  })
+})

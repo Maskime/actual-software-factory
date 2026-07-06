@@ -28,12 +28,15 @@ export default defineEventHandler(async (event) => {
 
   try {
     logger.info(`indexation complète project ${projectId}`)
+    const startedAt = Date.now()
     const files: IndexResult = await indexRepositoryFiles({ projectId, mcpGitlabUrl })
     const issues: IssueIndexResult = await indexProjectIssues({ projectId, mcpGitlabUrl })
+    const duration_ms = Date.now() - startedAt
+    const indexed = files.chunksUpserted + issues.chunksUpserted
     logger.info(
-      `indexation terminée : ${files.chunksUpserted} chunk(s) fichiers, ${issues.chunksUpserted} chunk(s) issues`,
+      `indexation terminée : ${files.chunksUpserted} chunk(s) fichiers, ${issues.chunksUpserted} chunk(s) issues (${duration_ms} ms)`,
     )
-    return { files, issues }
+    return { indexed, duration_ms }
   } catch (err) {
     logger.error('indexation échouée:', err)
     const detail = err instanceof Error ? err.message : String(err)
