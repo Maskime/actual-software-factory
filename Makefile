@@ -1,4 +1,4 @@
-.PHONY: test-mcp test-unit dev dev-chat build build-mcp-gitlab lint
+.PHONY: test-mcp test-unit dev dev-chat build build-mcp-gitlab lint prune
 
 # Run MCP round-trip integration tests.
 # Requires the MCP servers to be started via docker-compose:
@@ -25,3 +25,9 @@ lint:
 
 test-unit:
 	npm run test --workspaces --if-present
+
+# Reclaim Docker disk space: prune unused containers/images/build cache and
+# orphaned GitLab runner cache volumes. Safe to run while the stack is up.
+# Scheduled daily via cron (see CLAUDE.md § Infrastructure).
+prune:
+	bash infrastructure/scripts/docker-prune.sh
