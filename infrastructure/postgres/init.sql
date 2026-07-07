@@ -13,3 +13,15 @@ CREATE TABLE embeddings (
 
 CREATE INDEX ON embeddings USING ivfflat (embedding vector_cosine_ops);
 CREATE INDEX ON embeddings (project_id);
+
+CREATE TABLE IF NOT EXISTS prompt_versions (
+  id          SERIAL PRIMARY KEY,
+  agent_key   TEXT NOT NULL,
+  label       TEXT,
+  content     TEXT NOT NULL,
+  is_active   BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+-- Un seul is_active=TRUE par agent_key (garde-fou DB, choix opérateur)
+CREATE UNIQUE INDEX IF NOT EXISTS uq_prompt_versions_active
+  ON prompt_versions (agent_key) WHERE is_active;
