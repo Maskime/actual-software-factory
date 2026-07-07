@@ -29,4 +29,7 @@ secrets/
 **/coverage
 visual_feedback/*png*
 
+# Logs runtime (ex. maintenance docker-prune)
+infrastructure/logs/
+
 .claude/worktrees

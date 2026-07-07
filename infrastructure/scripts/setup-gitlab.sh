@@ -120,6 +120,11 @@ else
       "$GITLAB_URL/api/v4/runners/$EXISTING_RUNNER_ID" > /dev/null || true
   fi
 
+  # Drop any local config.toml entries whose runner no longer exists server-side
+  # (incl. the one just deleted above). Without this, each re-registration stacks
+  # a new [[runners]] block and orphans its runner-<id>-cache-* volumes forever.
+  docker exec gitlab-runner gitlab-runner verify --delete || true
+
   RESULT=$(api POST /user/runners \
     --data "runner_type=instance_type&description=factory-runner")
   RUNNER_BODY=$(check 201 "Runner token creation" "$RESULT")

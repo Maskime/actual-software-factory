@@ -122,6 +122,17 @@ Copy `infrastructure/.env.example` to `infrastructure/.env` and fill in values b
 
 `setup-gitlab.sh` is idempotent — safe to re-run. It waits up to 10 minutes for GitLab to become healthy before proceeding.
 
+**Maîtrise de l'espace disque Docker.** Le build cache, les images obsolètes et les volumes de cache des runners GitLab (`runner-<id>-cache-*`) s'accumulent avec l'usage. Deux garde-fous :
+
+1. **Prévention automatique** — `/etc/docker/daemon.json` (config hôte, hors repo) plafonne le build cache via `builder.gc` (`defaultKeepStorage: 15GB`) et borne les logs conteneurs (`log-opts` `max-size`/`max-file`). Modifier ce fichier nécessite `sudo` + un redémarrage du démon Docker (coupe tous les conteneurs une fois).
+2. **Nettoyage récurrent** — `infrastructure/scripts/docker-prune.sh` (ou `make prune`) purge conteneurs/images/build cache inutilisés et les volumes de cache runner orphelins. Sûr à exécuter stack up. Planifié quotidiennement via cron :
+
+```cron
+0 3 * * * /home/mfaye/dev/software_factory/infrastructure/scripts/docker-prune.sh >> /home/mfaye/dev/software_factory/infrastructure/logs/docker-prune.log 2>&1
+```
+
+`setup-gitlab.sh` exécute `gitlab-runner verify --delete` avant chaque ré-enregistrement pour éviter d'empiler des blocs `[[runners]]` (et donc d'orpheliner de nouveaux volumes de cache).
+
 ## Epics and user stories
 
 **GitLab is the single source of truth for epics and user stories.** Always fetch epic and US content via the GitLab MCP server (`mcp__gitlab__gitlab_list_issues`, `mcp__gitlab__gitlab_get_issue`, etc.) — never rely on local `docs/epic.md` or `docs/user_stories_N.md` files, which may be stale.
