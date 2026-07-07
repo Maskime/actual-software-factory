@@ -29,5 +29,6 @@ export default defineNuxtConfig({
     gitlabProjectId: '',
     databaseUrl: '',
     ragTopN: 8,
+    csrfTrustedOrigins: '',
   },
 })
