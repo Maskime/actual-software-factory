@@ -110,3 +110,8 @@
 ## EPIC-07 — review-fix-worker (US-2 — Lecture des commentaires bloquants)
 
 - [EPIC-07/US-2] M1 : `handleGetMr` récupère les notes avec `per_page=100` sans pagination — un MR avec plus de 100 notes verrait des commentaires `[BLOQUANT]` silencieusement omis ; implémenter la pagination dans `handleGetMr` ou exposer un champ `has_more_comments` (voir aussi [EPIC-02/US-03] M2)
+
+## Ticket #61 (Sécurité — Protection CSRF sur les endpoints POST)
+
+- [#61-followup] Support X-Forwarded-Host dans le middleware CSRF (getRequestURL xForwardedHost) le jour où un reverse proxy est introduit — nécessite validation d'IP de proxy de confiance (header spoofable sinon).
+- [#61-followup] /api/chat n'a aucun gate d'authentification serveur (getToken→401 absent, contrairement à submit/index) — voir ticket GitLab #179.
