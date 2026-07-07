@@ -75,6 +75,18 @@ import {
   createProjectSchema,
   handleCreateProject,
 } from "./tools/projects.js";
+import {
+  listVariablesSchema,
+  handleListVariables,
+  getVariableSchema,
+  handleGetVariable,
+  createVariableSchema,
+  handleCreateVariable,
+  updateVariableSchema,
+  handleUpdateVariable,
+  deleteVariableSchema,
+  handleDeleteVariable,
+} from "./tools/variables.js";
 
 export function buildMcpServer(client: GitLabClient): McpServer {
   const server = new McpServer({
@@ -321,6 +333,41 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     "Create a new GitLab project. Accepts an optional namespace_id to place the project in a group. Visibility defaults to private. Returns the created project ID, name, path, and URLs.",
     createProjectSchema.shape,
     (params) => handleCreateProject(client, params)
+  );
+
+  server.tool(
+    "gitlab_list_variables",
+    "List the CI/CD variables of a GitLab project. Returns metadata only (key, variable_type, protected, masked, raw, environment_scope, description) — variable VALUES are never returned in clear text because masked variables are sensitive. Returns up to 100 variables per call.",
+    listVariablesSchema.shape,
+    (params) => handleListVariables(client, params)
+  );
+
+  server.tool(
+    "gitlab_get_variable",
+    "Get a single CI/CD variable of a GitLab project by key. Use environment_scope to target a specific scope when the key exists for several scopes. Returns metadata only (key, type, protected, masked, raw, scope, description) — the value is never returned in clear text.",
+    getVariableSchema.shape,
+    (params) => handleGetVariable(client, params)
+  );
+
+  server.tool(
+    "gitlab_create_variable",
+    "Create a CI/CD variable in a GitLab project. Supports variable_type (env_var/file), protected, masked, raw, environment_scope, and description. Returns metadata only — the value is never echoed back in clear text.",
+    createVariableSchema.shape,
+    (params) => handleCreateVariable(client, params)
+  );
+
+  server.tool(
+    "gitlab_update_variable",
+    "Update an existing CI/CD variable of a GitLab project. environment_scope sets the NEW scope (can move a variable between scopes); filter_environment_scope targets the existing variable when the same key exists for several scopes. Returns metadata only — the value is never returned in clear text.",
+    updateVariableSchema.shape,
+    (params) => handleUpdateVariable(client, params)
+  );
+
+  server.tool(
+    "gitlab_delete_variable",
+    "Delete a CI/CD variable of a GitLab project by key. Use environment_scope to target a specific scope when the key exists for several scopes. Returns a deletion confirmation.",
+    deleteVariableSchema.shape,
+    (params) => handleDeleteVariable(client, params)
   );
 
   return server;
