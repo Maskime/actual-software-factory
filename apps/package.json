@@ -8,7 +8,8 @@
     "start": "node .output/server/index.mjs",
     "typecheck": "nuxi typecheck",
     "test": "vitest run",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "seed:prompts": "tsx server/scripts/seed-prompts.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.94.0",
