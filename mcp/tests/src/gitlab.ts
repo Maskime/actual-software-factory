@@ -63,7 +63,36 @@ export async function runGitLabSuite(): Promise<SuiteResult> {
       assertField(data, "title", updatedTitle);
     });
 
-    // 4. create branch
+    // 4. add issue comment
+    let issueCommentBody = "";
+    await runStep(steps, "gitlab_add_issue_comment", async () => {
+      issueCommentBody = `Round-trip issue comment [${tag}]`;
+      const { data, isError } = await callTool(client, "gitlab_add_issue_comment", {
+        project_id: PROJECT,
+        issue_iid: issueIid,
+        body: issueCommentBody,
+      });
+      assert(!isError, `Tool returned error: ${JSON.stringify(data)}`);
+      const id = assertField<number>(data, "id");
+      assert(id > 0, "Expected positive note id");
+    });
+
+    // 5. get issue comments and verify
+    await runStep(steps, "gitlab_get_issue_comments", async () => {
+      const { data, isError } = await callTool(client, "gitlab_get_issue_comments", {
+        project_id: PROJECT,
+        issue_iid: issueIid,
+      });
+      assert(!isError, `Tool returned error: ${JSON.stringify(data)}`);
+      const comments = data as Array<{ body: string }>;
+      assert(Array.isArray(comments), "Expected comments array");
+      assert(
+        comments.some((c) => c.body === issueCommentBody),
+        `Comment "${issueCommentBody}" not found on issue`
+      );
+    });
+
+    // 6. create branch
     await runStep(steps, "gitlab_create_branch", async () => {
       const { data, isError } = await callTool(client, "gitlab_create_branch", {
         project_id: PROJECT,
@@ -76,7 +105,7 @@ export async function runGitLabSuite(): Promise<SuiteResult> {
       assert(sha.length > 0, "Expected non-empty SHA");
     });
 
-    // 5. commit file
+    // 7. commit file
     await runStep(steps, "gitlab_commit_files", async () => {
       const { data, isError } = await callTool(client, "gitlab_commit_files", {
         project_id: PROJECT,
@@ -89,7 +118,7 @@ export async function runGitLabSuite(): Promise<SuiteResult> {
       assert(sha.length > 0, "Expected non-empty commit SHA");
     });
 
-    // 6. get file
+    // 8. get file
     await runStep(steps, "gitlab_get_file", async () => {
       const { data, isError } = await callTool(client, "gitlab_get_file", {
         project_id: PROJECT,
@@ -100,7 +129,7 @@ export async function runGitLabSuite(): Promise<SuiteResult> {
       assertField(data, "content", fileContent);
     });
 
-    // 7. list repository tree
+    // 9. list repository tree
     await runStep(steps, "gitlab_get_repository_tree", async () => {
       const { data, isError } = await callTool(client, "gitlab_get_repository_tree", {
         project_id: PROJECT,
@@ -115,7 +144,7 @@ export async function runGitLabSuite(): Promise<SuiteResult> {
       );
     });
 
-    // 8. create MR
+    // 10. create MR
     await runStep(steps, "gitlab_create_mr", async () => {
       const { data, isError } = await callTool(client, "gitlab_create_mr", {
         project_id: PROJECT,
@@ -129,7 +158,7 @@ export async function runGitLabSuite(): Promise<SuiteResult> {
       assert(mrIid > 0, `Expected positive MR iid, got ${mrIid}`);
     });
 
-    // 9. add comment
+    // 11. add comment
     let commentBody = "";
     await runStep(steps, "gitlab_add_mr_comment", async () => {
       commentBody = `Round-trip test comment [${tag}]`;
@@ -143,7 +172,7 @@ export async function runGitLabSuite(): Promise<SuiteResult> {
       assert(id > 0, "Expected positive note id");
     });
 
-    // 10. get MR and verify comment
+    // 12. get MR and verify comment
     await runStep(steps, "gitlab_get_mr", async () => {
       const { data, isError } = await callTool(client, "gitlab_get_mr", {
         project_id: PROJECT,
@@ -159,7 +188,7 @@ export async function runGitLabSuite(): Promise<SuiteResult> {
       );
     });
 
-    // 11. get MR diff
+    // 13. get MR diff
     await runStep(steps, "gitlab_get_mr_diff", async () => {
       const { data, isError } = await callTool(client, "gitlab_get_mr_diff", {
         project_id: PROJECT,

@@ -10,6 +10,8 @@ import {
   handleCreateIssueLink,
   handleGetIssueLinks,
   handleGetIssueComments,
+  handleAddIssueComment,
+  addIssueCommentSchema,
 } from './issues.js'
 
 vi.mock('./uploads.js', () => ({
@@ -300,5 +302,41 @@ describe('handleGetIssueComments()', () => {
     expect(result.isError).toBe(true)
     const parsed = JSON.parse(result.content[0].text)
     expect(parsed.error.code).toBe('GITLAB_NOT_FOUND')
+  })
+})
+
+describe('handleAddIssueComment()', () => {
+  const note = { id: 42, body: 'Great catch', author: { id: 10, username: 'alice', name: 'Alice' }, created_at: '2026-01-01T00:00:00Z' }
+
+  it('returns note details on success', async () => {
+    const client = { post: vi.fn().mockResolvedValue(note) } as unknown as GitLabClient
+    const result = await handleAddIssueComment(client, { project_id: '3', issue_iid: 1, body: 'Great catch' })
+    expect(result.isError).toBeUndefined()
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.id).toBe(42)
+    expect(parsed.body).toBe('Great catch')
+    expect(parsed.author).toEqual({ id: 10, username: 'alice', name: 'Alice' })
+    expect(parsed.created_at).toBe('2026-01-01T00:00:00Z')
+  })
+
+  it('posts to the notes route with the body payload', async () => {
+    const mockPost = vi.fn().mockResolvedValue(note)
+    const client = { post: mockPost } as unknown as GitLabClient
+    await handleAddIssueComment(client, { project_id: '3', issue_iid: 1, body: 'Great catch' })
+    expect(mockPost.mock.calls[0][0]).toBe('/projects/3/issues/1/notes')
+    expect(mockPost.mock.calls[0][1]).toEqual({ body: 'Great catch' })
+  })
+
+  it('returns errorResponse when the issue does not exist', async () => {
+    const client = { post: vi.fn().mockRejectedValue(new GitLabApiError('not found', 404, 'GITLAB_NOT_FOUND')) } as unknown as GitLabClient
+    const result = await handleAddIssueComment(client, { project_id: '3', issue_iid: 99, body: 'Great catch' })
+    expect(result.isError).toBe(true)
+    const parsed = JSON.parse(result.content[0].text)
+    expect(parsed.error.code).toBe('GITLAB_NOT_FOUND')
+  })
+
+  it('rejects an empty body at schema validation', () => {
+    const parsed = addIssueCommentSchema.safeParse({ project_id: '3', issue_iid: 1, body: '' })
+    expect(parsed.success).toBe(false)
   })
 })

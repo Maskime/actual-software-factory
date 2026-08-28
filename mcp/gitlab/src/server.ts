@@ -19,6 +19,8 @@ import {
   handleGetIssueLinks,
   getIssueCommentsSchema,
   handleGetIssueComments,
+  addIssueCommentSchema,
+  handleAddIssueComment,
 } from "./tools/issues.js";
 import { uploadFileSchema, handleUploadFile } from "./tools/uploads.js";
 import {
@@ -162,6 +164,13 @@ export function buildMcpServer(client: GitLabClient): McpServer {
     "Get the comments (human notes) of a GitLab issue. System notes are excluded by default. Returns id, author username, body, and created_at for each comment. Limited to 100 comments per call.",
     getIssueCommentsSchema.shape,
     (params) => handleGetIssueComments(client, params)
+  );
+
+  server.tool(
+    "gitlab_add_issue_comment",
+    "Post a comment (note) on a GitLab issue. Returns the created note id, body, author, and created_at.",
+    addIssueCommentSchema.shape,
+    (params) => handleAddIssueComment(client, params)
   );
 
   server.tool(
