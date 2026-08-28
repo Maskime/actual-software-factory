@@ -309,6 +309,41 @@ export async function handleGetIssueComments(
   }
 }
 
+// gitlab_add_issue_comment
+
+export const addIssueCommentSchema = z.object({
+  project_id: z.string().describe("Project ID or URL-encoded namespace/project"),
+  issue_iid: z.number().int().positive().describe("Issue IID (project-scoped integer ID)"),
+  body: z.string().min(1).describe("Comment text (Markdown)"),
+});
+
+export async function handleAddIssueComment(
+  client: GitLabClient,
+  params: z.infer<typeof addIssueCommentSchema>
+): Promise<ToolResult> {
+  try {
+    const note = await client.post<GitLabNote>(
+      `${projectPath(params.project_id)}/issues/${params.issue_iid}/notes`,
+      { body: params.body }
+    );
+    // `author` est renvoyé en entier (et non aplati en username comme dans
+    // handleGetIssueComments) pour rester aligné sur gitlab_add_mr_comment.
+    return {
+      content: [{
+        type: "text" as const,
+        text: JSON.stringify({
+          id: note.id,
+          body: note.body,
+          author: note.author,
+          created_at: note.created_at,
+        }),
+      }],
+    };
+  } catch (err) {
+    return errorResponse(err);
+  }
+}
+
 // gitlab_get_issue_links
 
 interface GitLabLinkedIssue {
